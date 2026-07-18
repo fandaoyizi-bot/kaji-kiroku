@@ -6,8 +6,8 @@ const VALUABLE_ITEMS = ['現金', '通帳', '印鑑', 'カード', 'その他貴
 // ─── 画面状態 ───
 let currentRecordId = null;   // 詳細表示中のID
 let editingId = null;         // 編集中のID（新規はnull）
-let formPhotosBefore = [];    // {kind:'new', blob, url} | {kind:'existing', fileId, url}
-let formPhotosAfter = [];
+let formBlocks = [];          // 作業ブロック {location, content, photosBefore:[], photosAfter:[]}
+                              // 写真: {kind:'new', blob, url} | {kind:'existing', fileId, url}
 let formAudios = [];          // {kind, blob?, fileId?, label, url}
 let objectUrls = [];          // 後で解放するURL
 
@@ -50,6 +50,23 @@ function nowLocalInput() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+// 旧形式（作業場所・内容・写真が日報直下）のレコードをブロック形式に揃える
+function normalizeRecord(r) {
+  if (!r.work_blocks) {
+    r.work_blocks = [{
+      location: r.location || '',
+      content: r.work_content || '',
+      photos_before: r.photos_before || [],
+      photos_after: r.photos_after || [],
+    }];
+  }
+  return r;
+}
+
+function blockLocations(r) {
+  return normalizeRecord(r).work_blocks.map(b => b.location).filter(Boolean).join('・') || '場所未記入';
+}
+
 // ─── 画面切替 ───
 function switchView(id) {
   revokeUrls();
@@ -87,7 +104,7 @@ async function renderRecordList() {
     const edited = r.modified_at ? `<span class="badge edited">修正あり</span>` : '';
     return `<button class="record-card" onclick="showDetail('${esc(r.id)}')">
       <div class="rc-date">${esc(fmtDateTime(r.visit_start))}</div>
-      <div class="rc-sub">${esc(r.location || '場所未記入')}${badge}${edited}</div>
+      <div class="rc-sub">${esc(blockLocations(r))}${badge}${edited}</div>
     </button>`;
   }).join('');
 }
@@ -131,37 +148,97 @@ function renderValuables(values) {
   });
 }
 
+// 作業ブロック
+function newEmptyBlock() {
+  return { location: '', content: '', photosBefore: [], photosAfter: [] };
+}
+
+function addBlock() {
+  formBlocks.push(newEmptyBlock());
+  renderBlocks();
+}
+
+function removeBlock(i) {
+  const b = formBlocks[i];
+  const hasContent = b.location || b.content || b.photosBefore.length || b.photosAfter.length;
+  if (hasContent && !confirm(`作業${i + 1}（${b.location || '場所未記入'}）を取り消しますか？`)) return;
+  formBlocks.splice(i, 1);
+  if (formBlocks.length === 0) formBlocks.push(newEmptyBlock());
+  renderBlocks();
+}
+
+function photoThumbsHtml(arr, blockIndex, side) {
+  return arr.map((p, j) => `<span class="photo-thumb">
+      <img src="${p.url}" alt="写真">
+      <button type="button" class="remove-btn" onclick="removeBlockPhoto(${blockIndex}, '${side}', ${j})" aria-label="削除">✕</button>
+    </span>`).join('');
+}
+
+function renderBlocks() {
+  const area = document.getElementById('blocks-area');
+  area.innerHTML = formBlocks.map((b, i) => `
+    <div class="work-block">
+      <div class="wb-head">
+        <span class="wb-title">作業${i + 1}</span>
+        ${formBlocks.length > 1 ? `<button type="button" class="remove-btn" style="position:static;" onclick="removeBlock(${i})" aria-label="取り消し">✕</button>` : ''}
+      </div>
+      <label class="field-label">場所</label>
+      <input type="text" class="input" value="${esc(b.location)}" placeholder="例：台所" oninput="formBlocks[${i}].location = this.value">
+      <label class="field-label">作業内容</label>
+      <textarea class="textarea" rows="4" placeholder="マイクボタンで音声入力もできます" oninput="formBlocks[${i}].content = this.value">${esc(b.content)}</textarea>
+      <label class="field-label">作業前の写真</label>
+      <input type="file" accept="image/*" multiple class="file-input" onchange="handleBlockPhotoInput(this, ${i}, 'photosBefore')">
+      <div class="photo-preview">${photoThumbsHtml(b.photosBefore, i, 'photosBefore')}</div>
+      <label class="field-label">作業後の写真</label>
+      <input type="file" accept="image/*" multiple class="file-input" onchange="handleBlockPhotoInput(this, ${i}, 'photosAfter')">
+      <div class="photo-preview">${photoThumbsHtml(b.photosAfter, i, 'photosAfter')}</div>
+    </div>`).join('');
+}
+
+async function handleBlockPhotoInput(inputEl, blockIndex, side) {
+  for (const file of inputEl.files) {
+    const blob = await compressImage(file);
+    formBlocks[blockIndex][side].push({ kind: 'new', blob, url: trackUrl(URL.createObjectURL(blob)) });
+  }
+  inputEl.value = '';
+  renderBlocks();
+}
+
+function removeBlockPhoto(blockIndex, side, j) {
+  formBlocks[blockIndex][side].splice(j, 1);
+  renderBlocks();
+}
+
 async function showForm(recordId) {
   editingId = recordId || null;
-  formPhotosBefore = [];
-  formPhotosAfter = [];
+  formBlocks = [];
   formAudios = [];
   stopRecordingIfActive();
 
   document.getElementById('form-title').textContent = editingId ? '日報の修正' : '新しい日報';
   document.getElementById('edit-notice').hidden = !editingId;
-  document.getElementById('f-photos-before').value = '';
-  document.getElementById('f-photos-after').value = '';
   document.getElementById('f-audio-file').value = '';
   document.getElementById('rec-status').textContent = '';
 
   if (editingId) {
-    const r = await dbGet('records', editingId);
+    const r = normalizeRecord(await dbGet('records', editingId));
     document.getElementById('f-start').value = r.visit_start || '';
     document.getElementById('f-end').value = r.visit_end || '';
-    document.getElementById('f-location').value = r.location || '';
-    document.getElementById('f-work').value = r.work_content || '';
     document.getElementById('f-moved').value = r.moved_items || '';
     document.getElementById('f-disposed').value = r.disposed_items || '';
     document.getElementById('f-valnote').value = r.valuables_note || '';
     renderValuables(r.valuables);
-    for (const fid of r.photos_before || []) {
-      const f = await dbGet('files', fid);
-      if (f) formPhotosBefore.push({ kind: 'existing', fileId: fid, url: trackUrl(URL.createObjectURL(f.blob)) });
-    }
-    for (const fid of r.photos_after || []) {
-      const f = await dbGet('files', fid);
-      if (f) formPhotosAfter.push({ kind: 'existing', fileId: fid, url: trackUrl(URL.createObjectURL(f.blob)) });
+    for (const wb of r.work_blocks) {
+      const block = { location: wb.location || '', content: wb.content || '', photosBefore: [], photosAfter: [] };
+      for (const fid of wb.photos_before || []) {
+        const f = await dbGet('files', fid);
+        if (f) block.photosBefore.push({ kind: 'existing', fileId: fid, url: trackUrl(URL.createObjectURL(f.blob)) });
+      }
+      for (const fid of wb.photos_after || []) {
+        const f = await dbGet('files', fid);
+        if (f) block.photosAfter.push({ kind: 'existing', fileId: fid, url: trackUrl(URL.createObjectURL(f.blob)) });
+      }
+      formBlocks.push(block);
     }
     for (const a of r.audios || []) {
       const f = await dbGet('files', a.fileId);
@@ -170,14 +247,13 @@ async function showForm(recordId) {
   } else {
     document.getElementById('f-start').value = nowLocalInput();
     document.getElementById('f-end').value = '';
-    document.getElementById('f-location').value = '';
-    document.getElementById('f-work').value = '';
     document.getElementById('f-moved').value = '';
     document.getElementById('f-disposed').value = '';
     document.getElementById('f-valnote').value = '';
     renderValuables(null);
+    formBlocks.push(newEmptyBlock());
   }
-  renderPhotoPreviews();
+  renderBlocks();
   renderAudioList();
   switchView('view-form');
 }
@@ -189,7 +265,7 @@ function confirmLeaveForm() {
   }
 }
 
-// 写真
+// 写真圧縮
 async function compressImage(file) {
   try {
     const url = URL.createObjectURL(file);
@@ -215,33 +291,6 @@ async function compressImage(file) {
   } catch {
     return file; // 圧縮に失敗したら元ファイルをそのまま使う
   }
-}
-
-async function handlePhotoInput(inputEl, targetArray) {
-  for (const file of inputEl.files) {
-    const blob = await compressImage(file);
-    targetArray.push({ kind: 'new', blob, url: trackUrl(URL.createObjectURL(blob)) });
-  }
-  inputEl.value = '';
-  renderPhotoPreviews();
-}
-
-function renderPhotoPreviews() {
-  const render = (arr, elId, side) => {
-    document.getElementById(elId).innerHTML = arr.map((p, i) =>
-      `<span class="photo-thumb">
-        <img src="${p.url}" alt="写真">
-        <button type="button" class="remove-btn" onclick="removePhoto('${side}', ${i})" aria-label="削除">✕</button>
-      </span>`).join('');
-  };
-  render(formPhotosBefore, 'preview-before', 'before');
-  render(formPhotosAfter, 'preview-after', 'after');
-}
-
-function removePhoto(side, index) {
-  const arr = side === 'before' ? formPhotosBefore : formPhotosAfter;
-  arr.splice(index, 1);
-  renderPhotoPreviews();
 }
 
 // 音声
@@ -350,10 +399,20 @@ async function saveRecord() {
     return fileId;
   };
 
-  const photosBefore = [];
-  for (const p of formPhotosBefore) photosBefore.push(await storeAttachment(p, 'photo'));
-  const photosAfter = [];
-  for (const p of formPhotosAfter) photosAfter.push(await storeAttachment(p, 'photo'));
+  const workBlocks = [];
+  for (const b of formBlocks) {
+    const photosBefore = [];
+    for (const p of b.photosBefore) photosBefore.push(await storeAttachment(p, 'photo'));
+    const photosAfter = [];
+    for (const p of b.photosAfter) photosAfter.push(await storeAttachment(p, 'photo'));
+    workBlocks.push({
+      location: b.location.trim(),
+      content: b.content.trim(),
+      photos_before: photosBefore,
+      photos_after: photosAfter,
+    });
+  }
+
   const audios = [];
   for (const a of formAudios) audios.push({ fileId: await storeAttachment(a, 'audio'), label: a.label });
 
@@ -366,6 +425,9 @@ async function saveRecord() {
     record.history = record.history || [];
     record.history.push({ saved_at: nowIso, snapshot });
     record.modified_at = nowIso;
+    // 旧形式のフィールドが残っていたら消してブロック形式に一本化
+    delete record.location; delete record.work_content;
+    delete record.photos_before; delete record.photos_after;
   } else {
     record = { id: newRecordId(), created_at: nowIso, modified_at: null, history: [] };
   }
@@ -373,14 +435,11 @@ async function saveRecord() {
   Object.assign(record, {
     visit_start: start,
     visit_end: document.getElementById('f-end').value,
-    location: document.getElementById('f-location').value.trim(),
-    work_content: document.getElementById('f-work').value.trim(),
+    work_blocks: workBlocks,
     moved_items: document.getElementById('f-moved').value.trim(),
     disposed_items: document.getElementById('f-disposed').value.trim(),
     valuables,
     valuables_note: document.getElementById('f-valnote').value.trim(),
-    photos_before: photosBefore,
-    photos_after: photosAfter,
     audios,
   });
 
@@ -393,8 +452,9 @@ async function saveRecord() {
 // ─── 詳細画面 ───
 async function showDetail(recordId) {
   currentRecordId = recordId;
-  const r = await dbGet('records', recordId);
-  if (!r) { showHome(); return; }
+  const raw = await dbGet('records', recordId);
+  if (!raw) { showHome(); return; }
+  const r = normalizeRecord(raw);
   switchView('view-detail');
   document.getElementById('share-box').hidden = true;
   document.getElementById('copy-status').textContent = '';
@@ -416,6 +476,18 @@ async function showDetail(recordId) {
     return html + '</div>';
   };
 
+  let blocksHtml = '';
+  for (let i = 0; i < r.work_blocks.length; i++) {
+    const b = r.work_blocks[i];
+    const title = r.work_blocks.length > 1 ? `作業${i + 1}：` : '';
+    blocksHtml += `<div class="detail-block">
+      <h3>${esc(title)}${esc(b.location || '場所未記入')}</h3>
+      <p>${esc(b.content || '（未記入）')}</p>
+      ${await photoHtml(b.photos_before, '作業前の写真')}
+      ${await photoHtml(b.photos_after, '作業後の写真')}
+    </div>`;
+  }
+
   let audioHtml = '';
   if (r.audios?.length) {
     audioHtml = '<div class="detail-block"><h3>音声</h3>';
@@ -433,10 +505,12 @@ async function showDetail(recordId) {
   if (r.history?.length) {
     historyHtml = `<div class="detail-block"><details><summary>修正履歴（${r.history.length}件）</summary>` +
       r.history.map((h, i) => {
-        const s = h.snapshot;
+        const s = normalizeRecord({ ...h.snapshot });
+        const workSummary = s.work_blocks.map(b =>
+          `${b.location || '場所未記入'}：${b.content || '（空欄）'}`).join(' ／ ');
         return `<div class="history-item">
           <strong>修正 ${i + 1}</strong>（${esc(fmtISO(h.saved_at))} に修正）<br>
-          修正前の作業内容：${esc(s.work_content || '（空欄）')}<br>
+          修正前の作業内容：${esc(workSummary)}<br>
           修正前の移動した物：${esc(s.moved_items || '（空欄）')}<br>
           修正前の処分した物：${esc(s.disposed_items || '（空欄）')}
         </div>`;
@@ -448,8 +522,7 @@ async function showDetail(recordId) {
       <h3>訪問日時</h3>
       <p>${esc(fmtDateTime(r.visit_start))} 〜 ${esc(r.visit_end ? fmtDateTime(r.visit_end) : '（未入力）')}</p>
     </div>
-    <div class="detail-block"><h3>作業場所</h3><p>${esc(r.location || '（未記入）')}</p></div>
-    <div class="detail-block"><h3>作業内容</h3><p>${esc(r.work_content || '（未記入）')}</p></div>
+    ${blocksHtml}
     <div class="detail-block"><h3>移動した物</h3><p>${esc(r.moved_items || 'なし')}</p></div>
     <div class="detail-block"><h3>処分した物</h3><p>${esc(r.disposed_items || 'なし')}</p></div>
     <div class="detail-block">
@@ -457,7 +530,6 @@ async function showDetail(recordId) {
       <p>${esc(valLines)}</p>
       ${r.valuables_note ? `<p class="meta-text">補足：${esc(r.valuables_note)}</p>` : ''}
     </div>
-    <div class="detail-block">${await photoHtml(r.photos_before, '作業前の写真')}${await photoHtml(r.photos_after, '作業後の写真')}</div>
     ${audioHtml}
     ${historyHtml}
     <p class="meta-text">
@@ -481,35 +553,51 @@ function editCurrentRecord() {
 
 // ─── 印刷（PDF出力）───
 async function printRecord() {
-  const r = await dbGet('records', currentRecordId);
-  if (!r) return;
+  const raw = await dbGet('records', currentRecordId);
+  if (!raw) return;
+  const r = normalizeRecord(raw);
   const touched = VALUABLE_ITEMS.filter(k => r.valuables?.[k] === '触れた');
   const valText = VALUABLE_ITEMS.map(k => `${k}：${r.valuables?.[k] || '触れていない'}`).join('　');
 
-  const photoFigs = async (fids, caption) => {
+  let blockRows = '';
+  for (let i = 0; i < r.work_blocks.length; i++) {
+    const b = r.work_blocks[i];
+    const label = r.work_blocks.length > 1 ? `作業${i + 1}：${b.location || '場所未記入'}` : `作業（${b.location || '場所未記入'}）`;
+    blockRows += `<tr><th>${esc(label)}</th><td>${esc(b.content || '（未記入）')}</td></tr>`;
+  }
+
+  const photoFigs = async (b, blockLabel) => {
     let html = '';
-    for (let i = 0; i < (fids?.length || 0); i++) {
-      const f = await dbGet('files', fids[i]);
-      if (f) {
-        const url = trackUrl(URL.createObjectURL(f.blob));
-        html += `<figure><img src="${url}"><figcaption>${caption} ${i + 1}</figcaption></figure>`;
+    const sides = [['photos_before', '作業前'], ['photos_after', '作業後']];
+    for (const [key, caption] of sides) {
+      const fids = b[key] || [];
+      for (let i = 0; i < fids.length; i++) {
+        const f = await dbGet('files', fids[i]);
+        if (f) {
+          const url = trackUrl(URL.createObjectURL(f.blob));
+          html += `<figure><img src="${url}"><figcaption>${esc(blockLabel)}・${caption} ${i + 1}</figcaption></figure>`;
+        }
       }
     }
     return html;
   };
 
+  let photosHtml = '';
+  for (const b of r.work_blocks) {
+    photosHtml += await photoFigs(b, b.location || '場所未記入');
+  }
+
   document.getElementById('print-area').innerHTML = `
     <h1>訪問作業日報</h1>
     <table>
       <tr><th>訪問日時</th><td>${esc(fmtDateTime(r.visit_start))} 〜 ${esc(r.visit_end ? fmtDateTime(r.visit_end) : '')}</td></tr>
-      <tr><th>作業場所</th><td>${esc(r.location)}</td></tr>
-      <tr><th>作業内容</th><td>${esc(r.work_content)}</td></tr>
+      ${blockRows}
       <tr><th>移動した物</th><td>${esc(r.moved_items || 'なし')}</td></tr>
       <tr><th>処分した物</th><td>${esc(r.disposed_items || 'なし')}</td></tr>
       <tr><th>貴重品への接触</th><td>${touched.length ? '接触あり' : '接触なし'}<br>${esc(valText)}${r.valuables_note ? '<br>補足：' + esc(r.valuables_note) : ''}</td></tr>
       <tr><th>音声記録</th><td>${r.audios?.length ? r.audios.map(a => esc(a.label)).join('、') + '（アプリ内に保存）' : 'なし'}</td></tr>
     </table>
-    <div class="print-photos">${await photoFigs(r.photos_before, '作業前')}${await photoFigs(r.photos_after, '作業後')}</div>
+    <div class="print-photos">${photosHtml}</div>
     <p class="print-meta">
       記録作成日時：${esc(fmtISO(r.created_at))}（自動記録）
       ${r.modified_at ? `／最終修正日時：${esc(fmtISO(r.modified_at))}（修正履歴${r.history?.length || 0}件をアプリ内に保存）` : '（修正なし）'}<br>
@@ -524,19 +612,25 @@ async function printRecord() {
 
 // ─── LINE報告文 ───
 async function buildShareText() {
-  const r = await dbGet('records', currentRecordId);
+  const r = normalizeRecord(await dbGet('records', currentRecordId));
   const touched = VALUABLE_ITEMS.filter(k => r.valuables?.[k] === '触れた');
+  let photoTotalBefore = 0, photoTotalAfter = 0;
+  const workLines = r.work_blocks.map(b => {
+    photoTotalBefore += (b.photos_before || []).length;
+    photoTotalAfter += (b.photos_after || []).length;
+    return `・${b.location || '－'}：${b.content || '－'}`;
+  });
   const lines = [
     '【訪問報告】星さん宅 お手伝い',
     `日時：${fmtDateTime(r.visit_start)}〜${r.visit_end ? fmtDateTime(r.visit_end).split(' ')[1] || '' : ''}`,
-    `場所：${r.location || '－'}`,
-    `作業：${r.work_content || '－'}`,
+    '作業：',
+    ...workLines,
     `移動した物：${r.moved_items || 'なし'}`,
     `処分した物：${r.disposed_items || 'なし'}`,
     touched.length
       ? `貴重品：${touched.join('・')}に触れました（${r.valuables_note || '詳細は日報参照'}）`
       : '貴重品（現金・通帳・印鑑・カード）：触れていません',
-    `写真：作業前${r.photos_before?.length || 0}枚・作業後${r.photos_after?.length || 0}枚（記録済み）`,
+    `写真：作業前${photoTotalBefore}枚・作業後${photoTotalAfter}枚（記録済み）`,
   ];
   return lines.join('\n');
 }
@@ -672,8 +766,6 @@ async function importBackup() {
 }
 
 // ─── 初期化 ───
-document.getElementById('f-photos-before').addEventListener('change', e => handlePhotoInput(e.target, formPhotosBefore));
-document.getElementById('f-photos-after').addEventListener('change', e => handlePhotoInput(e.target, formPhotosAfter));
 document.getElementById('f-audio-file').addEventListener('change', e => handleAudioFileInput(e.target));
 
 if ('serviceWorker' in navigator) {

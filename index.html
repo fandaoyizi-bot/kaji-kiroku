@@ -44,11 +44,9 @@
     <label class="field-label">訪問終了日時</label>
     <input type="datetime-local" id="f-end" class="input">
 
-    <label class="field-label">作業場所</label>
-    <input type="text" id="f-location" class="input" placeholder="例：台所、洗面所">
-
-    <label class="field-label">作業内容</label>
-    <textarea id="f-work" class="textarea" rows="6" placeholder="マイクボタンで音声入力もできます"></textarea>
+    <h2 class="section-title">作業した場所と内容</h2>
+    <div id="blocks-area"></div>
+    <button type="button" class="big-btn secondary" onclick="addBlock()">＋ 作業場所を追加</button>
 
     <label class="field-label">移動した物（どこからどこへ）</label>
     <textarea id="f-moved" class="textarea" rows="4" placeholder="なければ空欄でOK"></textarea>
@@ -60,15 +58,6 @@
     <div id="valuables-area"></div>
     <label class="field-label">補足メモ（触れた場合の状況など）</label>
     <textarea id="f-valnote" class="textarea" rows="2"></textarea>
-
-    <h2 class="section-title">写真</h2>
-    <label class="field-label">作業前の写真</label>
-    <input type="file" id="f-photos-before" accept="image/*" multiple class="file-input">
-    <div id="preview-before" class="photo-preview"></div>
-
-    <label class="field-label">作業後の写真</label>
-    <input type="file" id="f-photos-after" accept="image/*" multiple class="file-input">
-    <div id="preview-after" class="photo-preview"></div>
 
     <h2 class="section-title">音声</h2>
     <div class="rec-controls">

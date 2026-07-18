@@ -98,6 +98,14 @@ body {
 .val-choices label.touched-selected { background: #fde8e8; }
 .val-choices label.nottouched-selected { background: #e6f5ec; }
 
+/* 作業ブロック */
+.work-block {
+  background: var(--card); border: 1.5px solid var(--line); border-radius: 12px;
+  padding: 0.8rem 0.9rem 1rem; margin: 0.6rem 0;
+}
+.wb-head { display: flex; justify-content: space-between; align-items: center; }
+.wb-title { font-weight: 700; color: var(--main-dark); }
+
 /* 写真プレビュー */
 .photo-preview { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.5rem 0; }
 .photo-thumb { position: relative; }
