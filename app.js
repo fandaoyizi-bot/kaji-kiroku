@@ -634,17 +634,17 @@ async function buildShareText() {
     return `・${b.location || '－'}：${b.content || '－'}`;
   });
   const lines = [
-    '【訪問報告】星さん宅 お手伝い',
+    '【作業報告】星さん宅🌟',
     `日時：${fmtDateTime(r.visit_start)}〜${r.visit_end ? fmtDateTime(r.visit_end).split(' ')[1] || '' : ''}`,
     '作業：',
     ...workLines,
-    `移動した物：${r.moved_items || 'なし'}`,
-    `処分した物：${r.disposed_items || 'なし'}`,
-    touched
-      ? `貴重品：触れました（${r.valuables_note || '詳細は日報参照'}）`
-      : '貴重品（現金・通帳・印鑑・カードなど）：触れていません',
-    `写真：作業前${photoTotalBefore}枚・作業後${photoTotalAfter}枚（記録済み）`,
   ];
+  if (r.moved_items) lines.push(`移動した物：${r.moved_items}`);
+  if (r.disposed_items) lines.push(`処分した物：${r.disposed_items}`);
+  lines.push(touched
+    ? `貴重品：触れました（${r.valuables_note || '詳細は日報参照'}）`
+    : '貴重品（現金・通帳・印鑑・カードなど）：触れていません');
+  lines.push(`写真：作業前${photoTotalBefore}枚・作業後${photoTotalAfter}枚（記録済み）`);
   return lines.join('\n');
 }
 
