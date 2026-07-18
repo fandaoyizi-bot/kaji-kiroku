@@ -2,6 +2,7 @@
 // データはすべて端末内の IndexedDB に保存。外部送信は一切しない。
 
 const VALUABLES_LABEL = '現金・通帳・印鑑・カード・その他貴重品';
+const LOCATION_OPTIONS = ['居間', '台所', 'トイレ', 'お風呂', '床の間', '書斎', '寝室', '客間', '玄関'];
 
 // ─── 画面状態 ───
 let currentRecordId = null;   // 詳細表示中のID
@@ -162,7 +163,18 @@ function renderValuables(touchedValue) {
 
 // 作業ブロック
 function newEmptyBlock() {
-  return { location: '', content: '', photosBefore: [], photosAfter: [] };
+  return { location: '', content: '', photosBefore: [], photosAfter: [], otherMode: false };
+}
+
+function onBlockLocationChange(i, value) {
+  if (value === 'その他') {
+    formBlocks[i].otherMode = true;
+    formBlocks[i].location = '';
+  } else {
+    formBlocks[i].otherMode = false;
+    formBlocks[i].location = value;
+  }
+  renderBlocks();
 }
 
 function addBlock() {
@@ -188,14 +200,22 @@ function photoThumbsHtml(arr, blockIndex, side) {
 
 function renderBlocks() {
   const area = document.getElementById('blocks-area');
-  area.innerHTML = formBlocks.map((b, i) => `
+  area.innerHTML = formBlocks.map((b, i) => {
+    const otherMode = b.otherMode || (b.location !== '' && !LOCATION_OPTIONS.includes(b.location));
+    const selectValue = otherMode ? 'その他' : b.location;
+    return `
     <div class="work-block">
       <div class="wb-head">
         <span class="wb-title">作業${i + 1}</span>
         ${formBlocks.length > 1 ? `<button type="button" class="remove-btn" style="position:static;" onclick="removeBlock(${i})" aria-label="取り消し">✕</button>` : ''}
       </div>
       <label class="field-label">場所</label>
-      <input type="text" class="input" value="${esc(b.location)}" placeholder="例：台所" oninput="formBlocks[${i}].location = this.value">
+      <select class="input" onchange="onBlockLocationChange(${i}, this.value)">
+        <option value="" ${selectValue === '' ? 'selected' : ''} disabled>選択してください</option>
+        ${LOCATION_OPTIONS.map(opt => `<option value="${esc(opt)}" ${selectValue === opt ? 'selected' : ''}>${esc(opt)}</option>`).join('')}
+        <option value="その他" ${selectValue === 'その他' ? 'selected' : ''}>その他</option>
+      </select>
+      ${otherMode ? `<input type="text" class="input" style="margin-top:0.5rem" placeholder="場所を入力" value="${esc(b.location)}" oninput="formBlocks[${i}].location = this.value">` : ''}
       <label class="field-label">作業内容</label>
       <textarea class="textarea" rows="4" placeholder="マイクボタンで音声入力もできます" oninput="formBlocks[${i}].content = this.value">${esc(b.content)}</textarea>
       <label class="field-label">作業前の写真</label>
@@ -204,7 +224,8 @@ function renderBlocks() {
       <label class="field-label">作業後の写真</label>
       <input type="file" accept="image/*" multiple class="file-input" onchange="handleBlockPhotoInput(this, ${i}, 'photosAfter')">
       <div class="photo-preview">${photoThumbsHtml(b.photosAfter, i, 'photosAfter')}</div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 async function handleBlockPhotoInput(inputEl, blockIndex, side) {
@@ -241,7 +262,8 @@ async function showForm(recordId) {
     document.getElementById('f-valnote').value = r.valuables_note || '';
     renderValuables(r.valuables_touched);
     for (const wb of r.work_blocks) {
-      const block = { location: wb.location || '', content: wb.content || '', photosBefore: [], photosAfter: [] };
+      const loc = wb.location || '';
+      const block = { location: loc, content: wb.content || '', photosBefore: [], photosAfter: [], otherMode: loc !== '' && !LOCATION_OPTIONS.includes(loc) };
       for (const fid of wb.photos_before || []) {
         const f = await dbGet('files', fid);
         if (f) block.photosBefore.push({ kind: 'existing', fileId: fid, url: trackUrl(URL.createObjectURL(f.blob)) });
