@@ -1,7 +1,7 @@
 // 訪問作業記録アプリ 本体
 // データはすべて端末内の IndexedDB に保存。外部送信は一切しない。
 
-const VALUABLE_ITEMS = ['現金', '通帳', '印鑑', 'カード', 'その他貴重品'];
+const VALUABLES_LABEL = '現金・通帳・印鑑・カード・その他貴重品';
 
 // ─── 画面状態 ───
 let currentRecordId = null;   // 詳細表示中のID
@@ -50,7 +50,9 @@ function nowLocalInput() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-// 旧形式（作業場所・内容・写真が日報直下）のレコードをブロック形式に揃える
+// 旧形式のレコードを現行形式に揃える
+// ・作業場所・内容・写真が日報直下 → work_blocks へ
+// ・貴重品が5項目別チェック → 1問形式（valuables_touched）へ
 function normalizeRecord(r) {
   if (!r.work_blocks) {
     r.work_blocks = [{
@@ -59,6 +61,17 @@ function normalizeRecord(r) {
       photos_before: r.photos_before || [],
       photos_after: r.photos_after || [],
     }];
+  }
+  if (!r.valuables_touched) {
+    if (r.valuables) {
+      const touched = Object.keys(r.valuables).filter(k => r.valuables[k] === '触れた');
+      r.valuables_touched = touched.length ? '触れた' : '触れていない';
+      if (touched.length) {
+        r.valuables_note = [touched.join('・') + 'に接触', r.valuables_note].filter(Boolean).join('：');
+      }
+    } else {
+      r.valuables_touched = '触れていない';
+    }
   }
   return r;
 }
@@ -97,8 +110,8 @@ async function renderRecordList() {
     return;
   }
   listEl.innerHTML = records.map(r => {
-    const touched = VALUABLE_ITEMS.filter(k => r.valuables?.[k] === '触れた');
-    const badge = touched.length
+    normalizeRecord(r);
+    const badge = r.valuables_touched === '触れた'
       ? `<span class="badge warn">貴重品接触あり</span>`
       : `<span class="badge ok">貴重品接触なし</span>`;
     const edited = r.modified_at ? `<span class="badge edited">修正あり</span>` : '';
@@ -122,28 +135,27 @@ async function renderStorageInfo() {
 }
 
 // ─── フォーム ───
-function renderValuables(values) {
+function renderValuables(touchedValue) {
+  const v = touchedValue || '触れていない';
   const area = document.getElementById('valuables-area');
-  area.innerHTML = VALUABLE_ITEMS.map(item => {
-    const v = values?.[item] || '触れていない';
-    return `<div class="val-row">
-      <span class="val-name">${esc(item)}</span>
+  area.innerHTML = `<div class="val-row">
+      <span class="val-name">${esc(VALUABLES_LABEL)}</span>
       <span class="val-choices">
         <label class="${v === '触れていない' ? 'nottouched-selected' : ''}">
-          <input type="radio" name="val-${esc(item)}" value="触れていない" ${v === '触れていない' ? 'checked' : ''}>触れていない
+          <input type="radio" name="val-touched" value="触れていない" ${v === '触れていない' ? 'checked' : ''}>触れていない
         </label>
         <label class="${v === '触れた' ? 'touched-selected' : ''}">
-          <input type="radio" name="val-${esc(item)}" value="触れた" ${v === '触れた' ? 'checked' : ''}>触れた
+          <input type="radio" name="val-touched" value="触れた" ${v === '触れた' ? 'checked' : ''}>触れた
         </label>
       </span>
     </div>`;
-  }).join('');
+  document.getElementById('val-detail').hidden = v !== '触れた';
   area.querySelectorAll('input[type="radio"]').forEach(radio => {
     radio.addEventListener('change', () => {
       const row = radio.closest('.val-row');
       row.querySelectorAll('label').forEach(l => l.classList.remove('touched-selected', 'nottouched-selected'));
-      const label = radio.closest('label');
-      label.classList.add(radio.value === '触れた' ? 'touched-selected' : 'nottouched-selected');
+      radio.closest('label').classList.add(radio.value === '触れた' ? 'touched-selected' : 'nottouched-selected');
+      document.getElementById('val-detail').hidden = radio.value !== '触れた';
     });
   });
 }
@@ -227,7 +239,7 @@ async function showForm(recordId) {
     document.getElementById('f-moved').value = r.moved_items || '';
     document.getElementById('f-disposed').value = r.disposed_items || '';
     document.getElementById('f-valnote').value = r.valuables_note || '';
-    renderValuables(r.valuables);
+    renderValuables(r.valuables_touched);
     for (const wb of r.work_blocks) {
       const block = { location: wb.location || '', content: wb.content || '', photosBefore: [], photosAfter: [] };
       for (const fid of wb.photos_before || []) {
@@ -382,15 +394,18 @@ function removeAudio(index) {
 async function saveRecord() {
   const start = document.getElementById('f-start').value;
   if (!start) { alert('訪問開始日時を入力してください。'); return; }
+
+  const touchedEl = document.querySelector('input[name="val-touched"]:checked');
+  const valuablesTouched = touchedEl ? touchedEl.value : '触れていない';
+  const valNote = document.getElementById('f-valnote').value.trim();
+  if (valuablesTouched === '触れた' && !valNote) {
+    alert('貴重品に触れた場合は、何に・どんな事情で触れたかを記入してください。');
+    return;
+  }
+
   stopRecordingIfActive();
   // 録音停止の完了（onstopでの追加）を待つ
   await new Promise(r => setTimeout(r, 300));
-
-  const valuables = {};
-  for (const item of VALUABLE_ITEMS) {
-    const el = document.querySelector(`input[name="val-${item}"]:checked`);
-    valuables[item] = el ? el.value : '触れていない';
-  }
 
   const storeAttachment = async (entry, prefix) => {
     if (entry.kind === 'existing') return entry.fileId;
@@ -425,9 +440,10 @@ async function saveRecord() {
     record.history = record.history || [];
     record.history.push({ saved_at: nowIso, snapshot });
     record.modified_at = nowIso;
-    // 旧形式のフィールドが残っていたら消してブロック形式に一本化
+    // 旧形式のフィールドが残っていたら消して現行形式に一本化
     delete record.location; delete record.work_content;
     delete record.photos_before; delete record.photos_after;
+    delete record.valuables;
   } else {
     record = { id: newRecordId(), created_at: nowIso, modified_at: null, history: [] };
   }
@@ -438,8 +454,8 @@ async function saveRecord() {
     work_blocks: workBlocks,
     moved_items: document.getElementById('f-moved').value.trim(),
     disposed_items: document.getElementById('f-disposed').value.trim(),
-    valuables,
-    valuables_note: document.getElementById('f-valnote').value.trim(),
+    valuables_touched: valuablesTouched,
+    valuables_note: valuablesTouched === '触れた' ? valNote : '',
     audios,
   });
 
@@ -459,9 +475,7 @@ async function showDetail(recordId) {
   document.getElementById('share-box').hidden = true;
   document.getElementById('copy-status').textContent = '';
 
-  const touched = VALUABLE_ITEMS.filter(k => r.valuables?.[k] === '触れた');
-  const valLines = VALUABLE_ITEMS.map(k =>
-    `${k}：${r.valuables?.[k] || '触れていない'}`).join('\n');
+  const touched = r.valuables_touched === '触れた';
 
   const photoHtml = async (fids, caption) => {
     if (!fids?.length) return `<p class="meta-text">${caption}：なし</p>`;
@@ -526,9 +540,9 @@ async function showDetail(recordId) {
     <div class="detail-block"><h3>移動した物</h3><p>${esc(r.moved_items || 'なし')}</p></div>
     <div class="detail-block"><h3>処分した物</h3><p>${esc(r.disposed_items || 'なし')}</p></div>
     <div class="detail-block">
-      <h3>貴重品への接触 ${touched.length ? '<span class="badge warn">接触あり</span>' : '<span class="badge ok">接触なし</span>'}</h3>
-      <p>${esc(valLines)}</p>
-      ${r.valuables_note ? `<p class="meta-text">補足：${esc(r.valuables_note)}</p>` : ''}
+      <h3>貴重品への接触 ${touched ? '<span class="badge warn">接触あり</span>' : '<span class="badge ok">接触なし</span>'}</h3>
+      <p>${esc(VALUABLES_LABEL)}：${esc(r.valuables_touched)}</p>
+      ${r.valuables_note ? `<p class="meta-text">内容：${esc(r.valuables_note)}</p>` : ''}
     </div>
     ${audioHtml}
     ${historyHtml}
@@ -556,8 +570,7 @@ async function printRecord() {
   const raw = await dbGet('records', currentRecordId);
   if (!raw) return;
   const r = normalizeRecord(raw);
-  const touched = VALUABLE_ITEMS.filter(k => r.valuables?.[k] === '触れた');
-  const valText = VALUABLE_ITEMS.map(k => `${k}：${r.valuables?.[k] || '触れていない'}`).join('　');
+  const touched = r.valuables_touched === '触れた';
 
   let blockRows = '';
   for (let i = 0; i < r.work_blocks.length; i++) {
@@ -594,7 +607,7 @@ async function printRecord() {
       ${blockRows}
       <tr><th>移動した物</th><td>${esc(r.moved_items || 'なし')}</td></tr>
       <tr><th>処分した物</th><td>${esc(r.disposed_items || 'なし')}</td></tr>
-      <tr><th>貴重品への接触</th><td>${touched.length ? '接触あり' : '接触なし'}<br>${esc(valText)}${r.valuables_note ? '<br>補足：' + esc(r.valuables_note) : ''}</td></tr>
+      <tr><th>貴重品への接触</th><td>${touched ? '接触あり' : '接触なし'}（${esc(VALUABLES_LABEL)}）${r.valuables_note ? '<br>内容：' + esc(r.valuables_note) : ''}</td></tr>
       <tr><th>音声記録</th><td>${r.audios?.length ? r.audios.map(a => esc(a.label)).join('、') + '（アプリ内に保存）' : 'なし'}</td></tr>
     </table>
     <div class="print-photos">${photosHtml}</div>
@@ -613,7 +626,7 @@ async function printRecord() {
 // ─── LINE報告文 ───
 async function buildShareText() {
   const r = normalizeRecord(await dbGet('records', currentRecordId));
-  const touched = VALUABLE_ITEMS.filter(k => r.valuables?.[k] === '触れた');
+  const touched = r.valuables_touched === '触れた';
   let photoTotalBefore = 0, photoTotalAfter = 0;
   const workLines = r.work_blocks.map(b => {
     photoTotalBefore += (b.photos_before || []).length;
@@ -627,9 +640,9 @@ async function buildShareText() {
     ...workLines,
     `移動した物：${r.moved_items || 'なし'}`,
     `処分した物：${r.disposed_items || 'なし'}`,
-    touched.length
-      ? `貴重品：${touched.join('・')}に触れました（${r.valuables_note || '詳細は日報参照'}）`
-      : '貴重品（現金・通帳・印鑑・カード）：触れていません',
+    touched
+      ? `貴重品：触れました（${r.valuables_note || '詳細は日報参照'}）`
+      : '貴重品（現金・通帳・印鑑・カードなど）：触れていません',
     `写真：作業前${photoTotalBefore}枚・作業後${photoTotalAfter}枚（記録済み）`,
   ];
   return lines.join('\n');
