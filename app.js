@@ -699,19 +699,23 @@ async function copyShareText() {
   const status = document.getElementById('copy-status');
   ta.focus();
   ta.setSelectionRange(0, ta.value.length);
-  try {
-    await navigator.clipboard.writeText(ta.value);
-    status.textContent = '✓ コピーしました。LINEに貼り付けてください。';
-    return true;
-  } catch { /* HTTPSでないと使えないため次の方法を試す */ }
-  try {
-    if (document.execCommand('copy')) {
-      status.textContent = '✓ コピーしました。LINEに貼り付けてください。';
-      return true;
-    }
-  } catch { /* 古い方式も使えない環境向けに手動コピーを案内する */ }
-  status.textContent = '文章が選択されています。長押しして「コピー」を選んでください。';
-  return false;
+
+  // execCommandはクリックと同じ処理の流れ内でないとSafariに拒否されるため、
+  // awaitを挟む前に真っ先に試す（HTTP接続時はこちらが本命）
+  let copied = false;
+  try { copied = document.execCommand('copy'); } catch { /* 非対応環境 */ }
+
+  if (!copied && window.isSecureContext && navigator.clipboard) {
+    try {
+      await navigator.clipboard.writeText(ta.value);
+      copied = true;
+    } catch { /* HTTPS環境でも失敗した場合は手動コピーへ案内 */ }
+  }
+
+  status.textContent = copied
+    ? '✓ コピーしました。LINEに貼り付けてください。'
+    : '文章が選択されています。長押しして「コピー」を選んでください。';
+  return copied;
 }
 
 // ─── 暗号化バックアップ ───
