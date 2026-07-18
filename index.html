@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3a5a8c">
+<title>訪問作業記録</title>
+<link rel="manifest" href="./manifest.json">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="作業記録">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+
+<!-- ═══ ホーム画面 ═══ -->
+<section id="view-home" class="view">
+  <header class="app-header">
+    <h1>訪問作業記録</h1>
+    <button class="icon-btn" onclick="showSettings()" aria-label="設定">⚙️</button>
+  </header>
+  <div class="container">
+    <button class="big-btn primary" onclick="showForm()">＋ 新しい日報を作る</button>
+    <h2 class="section-title">これまでの記録</h2>
+    <div id="record-list" class="record-list"></div>
+    <p id="storage-info" class="storage-info"></p>
+  </div>
+</section>
+
+<!-- ═══ 日報フォーム ═══ -->
+<section id="view-form" class="view" hidden>
+  <header class="app-header">
+    <button class="icon-btn" onclick="confirmLeaveForm()" aria-label="戻る">←</button>
+    <h1 id="form-title">新しい日報</h1>
+    <span class="icon-btn"></span>
+  </header>
+  <div class="container">
+    <p id="edit-notice" class="notice" hidden>⚠️ 修正すると、修正前の内容と修正日時が履歴として自動保存されます。</p>
+
+    <label class="field-label">訪問開始日時 <span class="req">必須</span></label>
+    <input type="datetime-local" id="f-start" class="input">
+
+    <label class="field-label">訪問終了日時</label>
+    <input type="datetime-local" id="f-end" class="input">
+
+    <label class="field-label">作業場所</label>
+    <input type="text" id="f-location" class="input" placeholder="例：台所、洗面所">
+
+    <label class="field-label">作業内容</label>
+    <textarea id="f-work" class="textarea" rows="6" placeholder="マイクボタンで音声入力もできます"></textarea>
+
+    <label class="field-label">移動した物（どこからどこへ）</label>
+    <textarea id="f-moved" class="textarea" rows="4" placeholder="なければ空欄でOK"></textarea>
+
+    <label class="field-label">処分した物（星さんの了承の有無も）</label>
+    <textarea id="f-disposed" class="textarea" rows="4" placeholder="なければ空欄でOK"></textarea>
+
+    <h2 class="section-title">貴重品に触れたかどうか</h2>
+    <div id="valuables-area"></div>
+    <label class="field-label">補足メモ（触れた場合の状況など）</label>
+    <textarea id="f-valnote" class="textarea" rows="2"></textarea>
+
+    <h2 class="section-title">写真</h2>
+    <label class="field-label">作業前の写真</label>
+    <input type="file" id="f-photos-before" accept="image/*" multiple class="file-input">
+    <div id="preview-before" class="photo-preview"></div>
+
+    <label class="field-label">作業後の写真</label>
+    <input type="file" id="f-photos-after" accept="image/*" multiple class="file-input">
+    <div id="preview-after" class="photo-preview"></div>
+
+    <h2 class="section-title">音声</h2>
+    <div class="rec-controls">
+      <button id="btn-record" class="big-btn secondary" onclick="toggleRecording()">🎤 終了時確認を録音</button>
+      <span id="rec-status"></span>
+    </div>
+    <label class="field-label">音声ファイルを添付（ボイスメモなど）</label>
+    <input type="file" id="f-audio-file" accept="audio/*" multiple class="file-input">
+    <div id="audio-list" class="audio-list"></div>
+
+    <button class="big-btn primary save-btn" onclick="saveRecord()">保存する</button>
+  </div>
+</section>
+
+<!-- ═══ 詳細画面 ═══ -->
+<section id="view-detail" class="view" hidden>
+  <header class="app-header">
+    <button class="icon-btn" onclick="showHome()" aria-label="戻る">←</button>
+    <h1>日報の内容</h1>
+    <span class="icon-btn"></span>
+  </header>
+  <div class="container" id="detail-body"></div>
+  <div class="container action-bar">
+    <button class="big-btn secondary" onclick="printRecord()">🖨 PDF出力（印刷）</button>
+    <button class="big-btn secondary" onclick="showShareText()">💬 LINE報告文を作る</button>
+    <button class="big-btn outline" onclick="editCurrentRecord()">✏️ 修正する</button>
+  </div>
+  <div id="share-box" class="container" hidden>
+    <h2 class="section-title">報告文（そのまま送れます）</h2>
+    <textarea id="share-text" class="textarea" rows="10" readonly></textarea>
+    <button class="big-btn primary" onclick="shareText()">共有する（LINEを選択）</button>
+    <button class="big-btn outline" onclick="copyShareText()">コピーする</button>
+    <p id="copy-status" class="notice-ok"></p>
+  </div>
+</section>
+
+<!-- ═══ 設定画面 ═══ -->
+<section id="view-settings" class="view" hidden>
+  <header class="app-header">
+    <button class="icon-btn" onclick="showHome()" aria-label="戻る">←</button>
+    <h1>設定・バックアップ</h1>
+    <span class="icon-btn"></span>
+  </header>
+  <div class="container">
+    <h2 class="section-title">バックアップを書き出す</h2>
+    <p class="help-text">すべての記録・写真・音声を、パスワードで暗号化した1つのファイルにまとめて書き出します。書き出したファイルはiCloud DriveやPCに保管してください。<strong>週に1回</strong>の書き出しをおすすめします。</p>
+    <label class="field-label">暗号化パスワード（復元時に必要・忘れると復元できません）</label>
+    <input type="password" id="backup-pass" class="input" autocomplete="new-password">
+    <button class="big-btn primary" onclick="exportBackup()">🔒 暗号化して書き出す</button>
+    <p id="backup-status" class="notice-ok"></p>
+
+    <h2 class="section-title">バックアップから復元する</h2>
+    <p class="help-text">機種変更やデータ消失のときに使います。同じ記録番号のデータはバックアップの内容で上書きされます。</p>
+    <label class="field-label">バックアップファイル（.kkbk）</label>
+    <input type="file" id="restore-file" class="file-input">
+    <label class="field-label">パスワード</label>
+    <input type="password" id="restore-pass" class="input" autocomplete="off">
+    <button class="big-btn secondary" onclick="importBackup()">復元する</button>
+    <p id="restore-status" class="notice-ok"></p>
+
+    <h2 class="section-title">このアプリについて</h2>
+    <p class="help-text">
+      記録データはすべてこの端末の中だけに保存され、外部には一切送信されません。<br>
+      証拠としての信頼性を保つため、<strong>記録の削除機能はありません</strong>。修正した場合は修正前の内容と日時が履歴に残ります。<br>
+      ⚠️ Safariの「履歴とWebサイトデータを消去」や、ホーム画面からのアプリ削除を行うと記録が消えます。必ず定期的にバックアップを書き出してください。
+    </p>
+  </div>
+</section>
+
+<!-- ═══ 印刷用レイアウト ═══ -->
+<div id="print-area" aria-hidden="true"></div>
+
+<script src="./db.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>
