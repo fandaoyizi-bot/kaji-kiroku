@@ -679,22 +679,39 @@ async function showShareText() {
 async function shareText() {
   const text = document.getElementById('share-text').value;
   if (navigator.share) {
-    try { await navigator.share({ text }); } catch { /* キャンセル時は何もしない */ }
-  } else {
-    copyShareText();
+    try {
+      await navigator.share({ text });
+      return;
+    } catch (err) {
+      if (err && err.name === 'AbortError') return; // 共有シートをキャンセルした場合は何もしない
+    }
+  }
+  // 共有機能が使えない接続（HTTP接続時など）はコピーで代替する
+  const copied = await copyShareText();
+  const status = document.getElementById('copy-status');
+  if (copied) {
+    status.textContent = '共有メニューが使えない接続のため、代わりにコピーしました。LINEを開いて貼り付けてください。';
   }
 }
 
 async function copyShareText() {
   const ta = document.getElementById('share-text');
   const status = document.getElementById('copy-status');
+  ta.focus();
+  ta.setSelectionRange(0, ta.value.length);
   try {
     await navigator.clipboard.writeText(ta.value);
     status.textContent = '✓ コピーしました。LINEに貼り付けてください。';
-  } catch {
-    ta.focus(); ta.select();
-    status.textContent = '文章を長押しして「すべてを選択」→「コピー」してください。';
-  }
+    return true;
+  } catch { /* HTTPSでないと使えないため次の方法を試す */ }
+  try {
+    if (document.execCommand('copy')) {
+      status.textContent = '✓ コピーしました。LINEに貼り付けてください。';
+      return true;
+    }
+  } catch { /* 古い方式も使えない環境向けに手動コピーを案内する */ }
+  status.textContent = '文章が選択されています。長押しして「コピー」を選んでください。';
+  return false;
 }
 
 // ─── 暗号化バックアップ ───
