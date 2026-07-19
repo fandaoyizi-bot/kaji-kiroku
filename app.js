@@ -3,6 +3,7 @@
 
 const VALUABLES_LABEL = '現金・通帳・印鑑・カード・その他貴重品';
 const LOCATION_OPTIONS = ['居間', '台所', 'トイレ', 'お風呂', '床の間', '書斎', '寝室', '客間', '玄関'];
+const WORK_TAGS = ['整理整頓', '食器洗い', '拭き掃除', 'ゴミ出し'];
 
 // ─── 画面状態 ───
 let currentRecordId = null;   // 詳細表示中のID
@@ -20,6 +21,46 @@ function esc(s) {
 
 function trackUrl(url) { objectUrls.push(url); return url; }
 function revokeUrls() { objectUrls.forEach(u => URL.revokeObjectURL(u)); objectUrls = []; }
+
+function blockContentText(b) {
+  const tags = (b.tags || []).join('・');
+  const content = b.content || '';
+  if (tags && content) return `${tags}／${content}`;
+  return tags || content;
+}
+
+function fmtDateOnly(v) {
+  if (!v) return '';
+  const d = new Date(v);
+  if (isNaN(d)) return v;
+  const youbi = ['日', '月', '火', '水', '木', '金', '土'][d.getDay()];
+  return `${d.getMonth() + 1}/${d.getDate()}(${youbi})`;
+}
+
+function fmtTimeOnly(v) {
+  const d = new Date(v);
+  const pad = n => String(n).padStart(2, '0');
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function fmtTimeRange(start, end) {
+  if (!start) return '';
+  return end ? `${fmtTimeOnly(start)}〜${fmtTimeOnly(end)}` : `${fmtTimeOnly(start)}〜`;
+}
+
+function durationMinutes(start, end) {
+  if (!start || !end) return null;
+  const s = new Date(start), e = new Date(end);
+  if (isNaN(s) || isNaN(e)) return null;
+  const min = Math.round((e - s) / 60000);
+  return min >= 0 ? min : null;
+}
+
+function fmtDurationText(min) {
+  if (min == null) return '';
+  const h = Math.floor(min / 60), m = min % 60;
+  return h > 0 ? `${h}時間${m}分` : `${m}分`;
+}
 
 function newRecordId() {
   const d = new Date();
@@ -63,6 +104,7 @@ function normalizeRecord(r) {
       photos_after: r.photos_after || [],
     }];
   }
+  r.work_blocks.forEach(b => { if (!b.tags) b.tags = []; });
   if (!r.valuables_touched) {
     if (r.valuables) {
       const touched = Object.keys(r.valuables).filter(k => r.valuables[k] === '触れた');
@@ -163,7 +205,14 @@ function renderValuables(touchedValue) {
 
 // 作業ブロック
 function newEmptyBlock() {
-  return { location: '', content: '', photosBefore: [], photosAfter: [], otherMode: false };
+  return { location: '', content: '', tags: [], photosBefore: [], photosAfter: [], otherMode: false };
+}
+
+function toggleBlockTag(i, tag, checked) {
+  const tags = formBlocks[i].tags;
+  const idx = tags.indexOf(tag);
+  if (checked && idx === -1) tags.push(tag);
+  if (!checked && idx !== -1) tags.splice(idx, 1);
 }
 
 function onBlockLocationChange(i, value) {
@@ -217,7 +266,10 @@ function renderBlocks() {
       </select>
       ${otherMode ? `<input type="text" class="input" style="margin-top:0.5rem" placeholder="場所を入力" value="${esc(b.location)}" oninput="formBlocks[${i}].location = this.value">` : ''}
       <label class="field-label">作業内容</label>
-      <textarea class="textarea" rows="4" placeholder="マイクボタンで音声入力もできます" oninput="formBlocks[${i}].content = this.value">${esc(b.content)}</textarea>
+      <div class="tag-checks">
+        ${WORK_TAGS.map(tag => `<label class="tag-check"><input type="checkbox" ${b.tags.includes(tag) ? 'checked' : ''} onchange="toggleBlockTag(${i}, '${esc(tag)}', this.checked)">${esc(tag)}</label>`).join('')}
+      </div>
+      <textarea class="textarea" rows="4" placeholder="上記にない作業や詳細はこちらに（マイクボタンで音声入力もできます）" oninput="formBlocks[${i}].content = this.value">${esc(b.content)}</textarea>
       <label class="field-label">作業前の写真</label>
       <input type="file" accept="image/*" multiple class="file-input" onchange="handleBlockPhotoInput(this, ${i}, 'photosBefore')">
       <div class="photo-preview">${photoThumbsHtml(b.photosBefore, i, 'photosBefore')}</div>
@@ -257,13 +309,15 @@ async function showForm(recordId) {
     const r = normalizeRecord(await dbGet('records', editingId));
     document.getElementById('f-start').value = r.visit_start || '';
     document.getElementById('f-end').value = r.visit_end || '';
+    document.getElementById('f-next-visit').value = r.next_visit || '';
     document.getElementById('f-moved').value = r.moved_items || '';
     document.getElementById('f-disposed').value = r.disposed_items || '';
+    document.getElementById('f-comment').value = r.comment || '';
     document.getElementById('f-valnote').value = r.valuables_note || '';
     renderValuables(r.valuables_touched);
     for (const wb of r.work_blocks) {
       const loc = wb.location || '';
-      const block = { location: loc, content: wb.content || '', photosBefore: [], photosAfter: [], otherMode: loc !== '' && !LOCATION_OPTIONS.includes(loc) };
+      const block = { location: loc, content: wb.content || '', tags: wb.tags || [], photosBefore: [], photosAfter: [], otherMode: loc !== '' && !LOCATION_OPTIONS.includes(loc) };
       for (const fid of wb.photos_before || []) {
         const f = await dbGet('files', fid);
         if (f) block.photosBefore.push({ kind: 'existing', fileId: fid, url: trackUrl(URL.createObjectURL(f.blob)) });
@@ -281,8 +335,10 @@ async function showForm(recordId) {
   } else {
     document.getElementById('f-start').value = nowLocalInput();
     document.getElementById('f-end').value = '';
+    document.getElementById('f-next-visit').value = '';
     document.getElementById('f-moved').value = '';
     document.getElementById('f-disposed').value = '';
+    document.getElementById('f-comment').value = '';
     document.getElementById('f-valnote').value = '';
     renderValuables(null);
     formBlocks.push(newEmptyBlock());
@@ -445,6 +501,7 @@ async function saveRecord() {
     workBlocks.push({
       location: b.location.trim(),
       content: b.content.trim(),
+      tags: (b.tags || []).slice(),
       photos_before: photosBefore,
       photos_after: photosAfter,
     });
@@ -473,9 +530,11 @@ async function saveRecord() {
   Object.assign(record, {
     visit_start: start,
     visit_end: document.getElementById('f-end').value,
+    next_visit: document.getElementById('f-next-visit').value,
     work_blocks: workBlocks,
     moved_items: document.getElementById('f-moved').value.trim(),
     disposed_items: document.getElementById('f-disposed').value.trim(),
+    comment: document.getElementById('f-comment').value.trim(),
     valuables_touched: valuablesTouched,
     valuables_note: valuablesTouched === '触れた' ? valNote : '',
     audios,
@@ -518,7 +577,7 @@ async function showDetail(recordId) {
     const title = r.work_blocks.length > 1 ? `作業${i + 1}：` : '';
     blocksHtml += `<div class="detail-block">
       <h3>${esc(title)}${esc(b.location || '場所未記入')}</h3>
-      <p>${esc(b.content || '（未記入）')}</p>
+      <p>${esc(blockContentText(b) || '（未記入）')}</p>
       ${await photoHtml(b.photos_before, '作業前の写真')}
       ${await photoHtml(b.photos_after, '作業後の写真')}
     </div>`;
@@ -598,7 +657,7 @@ async function printRecord() {
   for (let i = 0; i < r.work_blocks.length; i++) {
     const b = r.work_blocks[i];
     const label = r.work_blocks.length > 1 ? `作業${i + 1}：${b.location || '場所未記入'}` : `作業（${b.location || '場所未記入'}）`;
-    blockRows += `<tr><th>${esc(label)}</th><td>${esc(b.content || '（未記入）')}</td></tr>`;
+    blockRows += `<tr><th>${esc(label)}</th><td>${esc(blockContentText(b) || '（未記入）')}</td></tr>`;
   }
 
   const photoFigs = async (b, blockLabel) => {
@@ -645,6 +704,40 @@ async function printRecord() {
   window.print();
 }
 
+// ─── 月次作業明細書PDF ───
+async function printMonthlySummary() {
+  const monthVal = document.getElementById('summary-month').value; // "YYYY-MM"
+  if (!monthVal) { alert('対象の年月を選択してください。'); return; }
+  const all = (await dbGetAll('records')).map(normalizeRecord);
+  const records = all.filter(r => (r.visit_start || '').startsWith(monthVal));
+  records.sort((a, b) => (a.visit_start || '').localeCompare(b.visit_start || ''));
+  if (records.length === 0) { alert('その月の記録が見つかりません。'); return; }
+
+  let totalMinutes = 0;
+  let hasUnknownDuration = false;
+  const rows = records.map(r => {
+    const dur = durationMinutes(r.visit_start, r.visit_end);
+    if (dur != null) totalMinutes += dur; else hasUnknownDuration = true;
+    return `<tr>
+      <td>${esc(fmtDateOnly(r.visit_start))}</td>
+      <td>${esc(fmtTimeRange(r.visit_start, r.visit_end))}</td>
+      <td>${dur != null ? esc(fmtDurationText(dur)) : '－'}</td>
+      <td>${esc(blockLocations(r))}</td>
+    </tr>`;
+  }).join('');
+
+  const [y, m] = monthVal.split('-');
+  document.getElementById('print-area').innerHTML = `
+    <h1>${esc(y)}年${Number(m)}月分 作業明細書</h1>
+    <table>
+      <tr><th>訪問日</th><th>時間帯</th><th>作業時間</th><th>作業場所</th></tr>
+      ${rows}
+      <tr><th colspan="2">合計（${records.length}件）</th><th>${esc(fmtDurationText(totalMinutes))}${hasUnknownDuration ? '※' : ''}</th><td></td></tr>
+    </table>
+    ${hasUnknownDuration ? '<p class="print-meta">※終了時刻が未入力の記録は作業時間の合計に含まれていません。</p>' : ''}`;
+  window.print();
+}
+
 // ─── LINE報告文 ───
 async function buildShareText() {
   const r = normalizeRecord(await dbGet('records', currentRecordId));
@@ -653,20 +746,28 @@ async function buildShareText() {
   const workLines = r.work_blocks.map(b => {
     photoTotalBefore += (b.photos_before || []).length;
     photoTotalAfter += (b.photos_after || []).length;
-    return `・${b.location || '－'}：${b.content || '－'}`;
+    return `　${b.location || '－'}：${blockContentText(b) || '－'}`;
   });
   const lines = [
-    '【作業報告】星さん宅🌟',
-    `日時：${fmtDateTime(r.visit_start)}〜${r.visit_end ? fmtDateTime(r.visit_end).split(' ')[1] || '' : ''}`,
-    '作業：',
+    '🌟作業報告🌟',
+    `【日時】${fmtDateTime(r.visit_start)}〜${r.visit_end ? fmtDateTime(r.visit_end).split(' ')[1] || '' : ''}`,
+    '【作業】',
     ...workLines,
   ];
-  if (r.moved_items) lines.push(`移動した物：${r.moved_items}`);
-  if (r.disposed_items) lines.push(`処分した物：${r.disposed_items}`);
+  if (r.moved_items) lines.push(`【移動した物】${r.moved_items}`);
+  if (r.disposed_items) lines.push(`【処分した物】${r.disposed_items}`);
   lines.push(touched
-    ? `貴重品：触れました（${r.valuables_note || '詳細は日報参照'}）`
-    : '貴重品（現金・通帳・印鑑・カードなど）：触れていません');
-  lines.push(`写真：作業前${photoTotalBefore}枚・作業後${photoTotalAfter}枚（記録済み）`);
+    ? `【貴重品】触れました（${r.valuables_note || '詳細は日報参照'}）`
+    : '【貴重品】現金・通帳・印鑑・カードなどには触れていません');
+  lines.push(`【写真】作業前${photoTotalBefore}枚・作業後${photoTotalAfter}枚（記録済み）`);
+
+  const trailing = [];
+  if (r.comment) trailing.push(`【コメント】${r.comment}`);
+  if (r.next_visit) trailing.push(`【次回訪問予定】${fmtDateTime(r.next_visit)}`);
+  if (trailing.length) {
+    lines.push('');
+    lines.push(...trailing);
+  }
   return lines.join('\n');
 }
 

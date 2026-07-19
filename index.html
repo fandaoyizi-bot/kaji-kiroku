@@ -44,6 +44,9 @@
     <label class="field-label">訪問終了日時</label>
     <input type="datetime-local" id="f-end" class="input">
 
+    <label class="field-label">次回訪問予定日時（任意）</label>
+    <input type="datetime-local" id="f-next-visit" class="input">
+
     <h2 class="section-title">作業した場所と内容</h2>
     <div id="blocks-area"></div>
     <button type="button" class="big-btn secondary" onclick="addBlock()">＋ 作業場所を追加</button>
@@ -53,6 +56,9 @@
 
     <label class="field-label">処分した物（星さんの了承の有無も）</label>
     <textarea id="f-disposed" class="textarea" rows="4" placeholder="なければ空欄でOK"></textarea>
+
+    <label class="field-label">当日のコメント（任意・LINE報告文にのみ表示されます）</label>
+    <textarea id="f-comment" class="textarea" rows="3" placeholder="星さんの様子や引き継ぎ事項など、なければ空欄でOK"></textarea>
 
     <h2 class="section-title">貴重品に触れたかどうか</h2>
     <div id="valuables-area"></div>
@@ -119,6 +125,12 @@
     <input type="password" id="restore-pass" class="input" autocomplete="off">
     <button class="big-btn secondary" onclick="importBackup()">復元する</button>
     <p id="restore-status" class="notice-ok"></p>
+
+    <h2 class="section-title">月次作業明細書PDFを作る</h2>
+    <p class="help-text">指定した月の全訪問記録を、訪問日・時間帯・作業時間の一覧にまとめてPDF出力します。請求書への添付にご利用ください。</p>
+    <label class="field-label">対象の年月</label>
+    <input type="month" id="summary-month" class="input">
+    <button class="big-btn secondary" onclick="printMonthlySummary()">📋 作業明細書PDFを作る</button>
 
     <h2 class="section-title">このアプリについて</h2>
     <p class="help-text">
