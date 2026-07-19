@@ -92,6 +92,13 @@ function nowLocalInput() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+function defaultNextVisitInput() {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T10:00`;
+}
+
 // 旧形式のレコードを現行形式に揃える
 // ・作業場所・内容・写真が日報直下 → work_blocks へ
 // ・貴重品が5項目別チェック → 1問形式（valuables_touched）へ
@@ -335,7 +342,7 @@ async function showForm(recordId) {
   } else {
     document.getElementById('f-start').value = nowLocalInput();
     document.getElementById('f-end').value = '';
-    document.getElementById('f-next-visit').value = '';
+    document.getElementById('f-next-visit').value = defaultNextVisitInput();
     document.getElementById('f-moved').value = '';
     document.getElementById('f-disposed').value = '';
     document.getElementById('f-comment').value = '';

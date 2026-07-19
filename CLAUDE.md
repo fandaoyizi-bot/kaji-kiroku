@@ -47,11 +47,12 @@
 
 ## ハマりやすい技術的な注意点（実際に踏んだ罠）
 
-1. **Service Workerのキャッシュ**: `sw.js`の`CACHE_NAME`（現在 `kaji-kiroku-v8`）を変更しないと、更新したファイルが反映されない。ローカルでテストする際は`navigator.serviceWorker.getRegistrations()`で unregister + `caches.keys()`を全削除してからreloadすること。コードを変更したら**必ずCACHE_NAMEをインクリメントする**。
+1. **Service Workerのキャッシュ**: `sw.js`の`CACHE_NAME`（現在 `kaji-kiroku-v9`）を変更しないと、更新したファイルが反映されない。ローカルでテストする際は`navigator.serviceWorker.getRegistrations()`で unregister + `caches.keys()`を全削除してからreloadすること。コードを変更したら**必ずCACHE_NAMEをインクリメントする**。
 2. **navigator.share / navigator.clipboard はHTTPSかlocalhostでないと使えない**。LAN内のIPアドレス（`http://192.168.x.x`）経由のテストではどちらも動かない。
 3. **Safariの`document.execCommand('copy')`はクリックした処理の流れから外れると拒否される**。`await`を挟む前に真っ先に同期的に呼び出すこと（`copyShareText()`内で実装済み。参考として残しておく）。
 4. **IndexedDBはオリジン（URL）ごとに別々**。LAN内テスト用URLとGitHub PagesのURLではデータが共有されない。今後の実運用はGitHub PagesのURL一本に統一する。
 5. ブラウザでの自動テスト中、複数タブが同じorigin（`localhost:8124`など）を開いたままだとIndexedDBの接続がロックされて`dbPut`等が固まることがあった。テスト用の余分なタブは閉じること。
+6. **「ホーム画面に追加」はSafari以外だと正しく機能しない**。iPhoneのデフォルトブラウザをEdge/Chrome等にしていても、それらのアプリの「ホーム画面に追加」はアプリアイコン（`manifest.json`/`apple-touch-icon`）を正しく読み込まず、汎用アイコンになってしまう。ユーザーがアイコン変更後に「反映されない」と報告してきたときは、まずデフォルトブラウザがSafari以外になっていないか確認する。対処法：デフォルトブラウザの設定に関わらず、**Safariアプリを直接開いて**そこから「共有」→「ホーム画面に追加」を行う。
 
 ## 現在の状況（引き継ぎ時点）
 
@@ -59,6 +60,7 @@
 - GitHub Pagesへのデプロイも完了、公開URLで動作確認中
 - ユーザー（本人）がiPhone実機での最終テストを継続中（カメラ・マイク録音・共有シート・ホーム画面追加など）
 - 未解決の不具合報告はなし（直近の「コピーボタンが効かない」問題は`execCommand`の呼び出し順序修正で解決・確認済み）
+- 追加機能（アプリアイコンを猫の魔女イラストに変更／LINE報告文フォーマット刷新／当日のコメント欄／次回訪問予定日時／作業内容チェックボックス／月次作業明細書PDF）を実装・push済み。iPhoneでの見た目確認もアイコン表示問題（Safari以外での「ホーム画面に追加」の制限）を解決して完了
 
 ## 次にやること（想定）
 
