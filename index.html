@@ -126,11 +126,13 @@
     <button class="big-btn secondary" onclick="importBackup()">復元する</button>
     <p id="restore-status" class="notice-ok"></p>
 
-    <h2 class="section-title">月次作業明細書PDFを作る</h2>
-    <p class="help-text">指定した月の全訪問記録を、訪問日・時間帯・作業時間の一覧にまとめてPDF出力します。請求書への添付にご利用ください。</p>
-    <label class="field-label">対象の年月</label>
-    <input type="month" id="summary-month" class="input">
-    <button class="big-btn secondary" onclick="printMonthlySummary()">📋 作業明細書PDFを作る</button>
+    <h2 class="section-title">作業明細書PDFを作る（PCでのご利用を想定）</h2>
+    <p class="help-text">指定した期間の全訪問記録を、訪問日・時間帯・作業時間の一覧にまとめてPDF出力します。請求書への添付にご利用ください。</p>
+    <label class="field-label">開始日</label>
+    <input type="date" id="summary-start" class="input">
+    <label class="field-label">終了日</label>
+    <input type="date" id="summary-end" class="input">
+    <button class="big-btn secondary" onclick="printPeriodSummary()">📋 作業明細書PDFを作る</button>
 
     <h2 class="section-title">このアプリについて</h2>
     <p class="help-text">

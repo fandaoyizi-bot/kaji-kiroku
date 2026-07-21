@@ -2,8 +2,8 @@
 // データはすべて端末内の IndexedDB に保存。外部送信は一切しない。
 
 const VALUABLES_LABEL = '現金・通帳・印鑑・カード・その他貴重品';
-const LOCATION_OPTIONS = ['居間', '台所', 'トイレ', 'お風呂', '床の間', '書斎', '寝室', '客間', '玄関'];
-const WORK_TAGS = ['整理整頓', '食器洗い', '拭き掃除', 'ゴミ出し'];
+const LOCATION_OPTIONS = ['居間', '台所', 'トイレ', 'お風呂・洗面', '床の間', '書斎', '寝室', '客間', '玄関'];
+const WORK_TAGS = ['整理整頓', '掃除機', '食器洗い', '拭き掃除', 'ゴミ出し'];
 
 // ─── 画面状態 ───
 let currentRecordId = null;   // 詳細表示中のID
@@ -77,6 +77,16 @@ function fmtDateTime(v) {
   const youbi = ['日', '月', '火', '水', '木', '金', '土'][d.getDay()];
   const pad = n => String(n).padStart(2, '0');
   return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日(${youbi}) ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function fmtDateTimeNoYear(v) {
+  // 'YYYY-MM-DDTHH:MM' → '7月25日(土)10:00'（年・曜日直後のスペースなし）
+  if (!v) return '';
+  const d = new Date(v);
+  if (isNaN(d)) return v;
+  const youbi = ['日', '月', '火', '水', '木', '金', '土'][d.getDay()];
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getMonth() + 1}月${d.getDate()}日(${youbi})${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 function fmtISO(iso) {
@@ -159,16 +169,41 @@ async function renderRecordList() {
     listEl.innerHTML = '<p class="empty-msg">まだ記録がありません。<br>「＋ 新しい日報を作る」から始めてください。</p>';
     return;
   }
-  listEl.innerHTML = records.map(r => {
-    normalizeRecord(r);
-    const badge = r.valuables_touched === '触れた'
-      ? `<span class="badge warn">貴重品接触あり</span>`
-      : `<span class="badge ok">貴重品接触なし</span>`;
-    const edited = r.modified_at ? `<span class="badge edited">修正あり</span>` : '';
-    return `<button class="record-card" onclick="showDetail('${esc(r.id)}')">
-      <div class="rc-date">${esc(fmtDateTime(r.visit_start))}</div>
-      <div class="rc-sub">${esc(blockLocations(r))}${badge}${edited}</div>
-    </button>`;
+  records.forEach(normalizeRecord);
+
+  const now = new Date();
+  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+  const groups = [];
+  const groupMap = new Map();
+  for (const r of records) {
+    const key = (r.visit_start || '').slice(0, 7);
+    if (!groupMap.has(key)) {
+      const g = { key, records: [] };
+      groupMap.set(key, g);
+      groups.push(g);
+    }
+    groupMap.get(key).records.push(r);
+  }
+
+  listEl.innerHTML = groups.map(g => {
+    const [y, m] = g.key.split('-');
+    const label = (y && m) ? `${y}年${Number(m)}月` : '日付未入力';
+    const isOpen = g.key === currentMonthKey;
+    const cardsHtml = g.records.map(r => {
+      const badge = r.valuables_touched === '触れた'
+        ? `<span class="badge warn">貴重品接触あり</span>`
+        : `<span class="badge ok">貴重品接触なし</span>`;
+      const edited = r.modified_at ? `<span class="badge edited">修正あり</span>` : '';
+      return `<button class="record-card" onclick="showDetail('${esc(r.id)}')">
+        <div class="rc-date">${esc(fmtDateTime(r.visit_start))}</div>
+        <div class="rc-sub">${esc(blockLocations(r))}${badge}${edited}</div>
+      </button>`;
+    }).join('');
+    return `<details class="month-group"${isOpen ? ' open' : ''}>
+      <summary class="month-summary">${esc(label)}（${g.records.length}件）</summary>
+      ${cardsHtml}
+    </details>`;
   }).join('');
 }
 
@@ -711,14 +746,25 @@ async function printRecord() {
   window.print();
 }
 
-// ─── 月次作業明細書PDF ───
-async function printMonthlySummary() {
-  const monthVal = document.getElementById('summary-month').value; // "YYYY-MM"
-  if (!monthVal) { alert('対象の年月を選択してください。'); return; }
+// ─── 期間指定の作業明細書PDF ───
+function fmtYmdLabel(ymd) {
+  const [y, m, d] = ymd.split('-').map(Number);
+  return `${y}年${m}月${d}日`;
+}
+
+async function printPeriodSummary() {
+  const startVal = document.getElementById('summary-start').value; // "YYYY-MM-DD"
+  const endVal = document.getElementById('summary-end').value;
+  if (!startVal || !endVal) { alert('開始日と終了日を選択してください。'); return; }
+  if (startVal > endVal) { alert('開始日は終了日より前の日付にしてください。'); return; }
+
   const all = (await dbGetAll('records')).map(normalizeRecord);
-  const records = all.filter(r => (r.visit_start || '').startsWith(monthVal));
+  const records = all.filter(r => {
+    const d = (r.visit_start || '').slice(0, 10);
+    return d && d >= startVal && d <= endVal;
+  });
   records.sort((a, b) => (a.visit_start || '').localeCompare(b.visit_start || ''));
-  if (records.length === 0) { alert('その月の記録が見つかりません。'); return; }
+  if (records.length === 0) { alert('その期間の記録が見つかりません。'); return; }
 
   let totalMinutes = 0;
   let hasUnknownDuration = false;
@@ -733,9 +779,8 @@ async function printMonthlySummary() {
     </tr>`;
   }).join('');
 
-  const [y, m] = monthVal.split('-');
   document.getElementById('print-area').innerHTML = `
-    <h1>${esc(y)}年${Number(m)}月分 作業明細書</h1>
+    <h1>${esc(fmtYmdLabel(startVal))} 〜 ${esc(fmtYmdLabel(endVal))} 作業明細書</h1>
     <table>
       <tr><th>訪問日</th><th>時間帯</th><th>作業時間</th><th>作業場所</th></tr>
       ${rows}
@@ -753,27 +798,29 @@ async function buildShareText() {
   const workLines = r.work_blocks.map(b => {
     photoTotalBefore += (b.photos_before || []).length;
     photoTotalAfter += (b.photos_after || []).length;
-    return `　${b.location || '－'}：${blockContentText(b) || '－'}`;
+    return `${b.location || '－'}：${blockContentText(b) || '－'}`;
   });
   const lines = [
     '🌟作業報告🌟',
-    `【日時】${fmtDateTime(r.visit_start)}〜${r.visit_end ? fmtDateTime(r.visit_end).split(' ')[1] || '' : ''}`,
+    `【日時】${fmtDateTimeNoYear(r.visit_start)}〜${r.visit_end ? fmtTimeOnly(r.visit_end) : ''}`,
     '【作業】',
     ...workLines,
   ];
   if (r.moved_items) lines.push(`【移動した物】${r.moved_items}`);
   if (r.disposed_items) lines.push(`【処分した物】${r.disposed_items}`);
+  lines.push('');
   lines.push(touched
     ? `【貴重品】触れました（${r.valuables_note || '詳細は日報参照'}）`
     : '【貴重品】現金・通帳・印鑑・カードなどには触れていません');
   lines.push(`【写真】作業前${photoTotalBefore}枚・作業後${photoTotalAfter}枚（記録済み）`);
 
-  const trailing = [];
-  if (r.comment) trailing.push(`【コメント】${r.comment}`);
-  if (r.next_visit) trailing.push(`【次回訪問予定】${fmtDateTime(r.next_visit)}`);
-  if (trailing.length) {
+  if (r.comment) {
     lines.push('');
-    lines.push(...trailing);
+    lines.push(`【コメント】${r.comment}`);
+  }
+  if (r.next_visit) {
+    lines.push('');
+    lines.push(`【次回訪問予定】${fmtDateTimeNoYear(r.next_visit)}`);
   }
   return lines.join('\n');
 }

@@ -149,6 +149,11 @@ body {
 
 /* 記録リスト */
 .record-list { margin-top: 0.3rem; }
+.month-group { margin: 0.8rem 0; }
+.month-summary {
+  cursor: pointer; font-size: 1.05rem; font-weight: 700;
+  color: var(--main-dark); padding: 0.4rem 0.2rem;
+}
 .record-card {
   display: block; width: 100%; text-align: left;
   background: var(--card); border: none; border-radius: 18px;
