@@ -152,8 +152,10 @@
     <label class="field-label">備考</label>
     <input type="text" id="inv-remarks" class="input" placeholder="例：交通費込み">
 
-    <button class="big-btn primary" onclick="generateInvoice()">🧾 請求書を作る（作業明細書を添付）</button>
-    <p class="help-text">訪問回数・小計・合計は記録から自動計算されます。発行者・請求先などの入力内容はこの端末に保存され、次回から自動で入力されます。</p>
+    <button class="big-btn secondary" onclick="loadInvoiceTargets()">① 対象期間の訪問を表示</button>
+    <div id="invoice-targets" class="invoice-targets" hidden></div>
+    <button class="big-btn primary" onclick="generateInvoice()">② 選んだ訪問で請求書を作る</button>
+    <p class="help-text">まず①で対象期間の訪問一覧を表示し、<strong>請求する訪問だけにチェック</strong>を付けてください（テストや請求しない訪問はチェックを外す）。②を押すと、チェックした訪問だけで請求書を作ります。訪問回数・小計・合計は自動計算されます。発行者・請求先などの入力内容はこの端末に保存され、次回から自動で入力されます。</p>
 
     <h2 class="section-title">作業明細書だけ作る</h2>
     <p class="help-text">請求書なしで、訪問日・時間帯・作業時間の一覧だけをPDF出力します。</p>

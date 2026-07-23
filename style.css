@@ -204,6 +204,34 @@ details summary { cursor: pointer; font-size: 0.92rem; color: var(--main-dark); 
 }
 .lightbox img { max-width: 96vw; max-height: 92vh; object-fit: contain; }
 
+/* 請求書：対象の訪問を選ぶチェックリスト */
+.invoice-targets {
+  margin: 0.4rem 0 0.9rem; padding: 0.7rem 0.8rem;
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+}
+.targets-head {
+  display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
+  font-weight: 700; color: var(--main-dark); font-size: 0.9rem; margin-bottom: 0.4rem;
+}
+.link-btn {
+  background: none; border: none; color: var(--accent);
+  font-size: 0.85rem; cursor: pointer; text-decoration: underline;
+  padding: 0.1rem 0.3rem; font-family: inherit;
+}
+.targets-list { list-style: none; max-height: 300px; overflow-y: auto; }
+.targets-list li { border-bottom: 1px dashed var(--line); }
+.targets-list label {
+  display: flex; align-items: center; gap: 0.55rem;
+  padding: 0.5rem 0.15rem; cursor: pointer; font-size: 0.9rem;
+}
+.targets-list input { width: 20px; height: 20px; flex: none; accent-color: var(--main); }
+.targets-list .t-date { white-space: nowrap; color: var(--text); font-weight: 600; }
+.targets-list .t-loc {
+  color: var(--muted); font-size: 0.82rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.targets-summary { margin: 0.5rem 0.15rem 0; font-weight: 700; color: var(--main-dark); font-size: 0.9rem; }
+
 /* ═══ 印刷（PDF出力）は証拠書類として読みやすい白黒のまま ═══ */
 #print-area { display: none; }
 

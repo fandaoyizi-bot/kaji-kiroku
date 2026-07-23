@@ -801,8 +801,14 @@ async function printPeriodSummary() {
 
 // ─── 請求書（作業明細書つき）───
 const INVOICE_SETTINGS_KEY = 'kk_invoice_settings';
+let invoiceTargetPeriod = null; // 現在チェックリストを表示中の期間 {start, end}
 
 function loadInvoiceSettings() {
+  // 前回のチェックリストは毎回リセット（①から選び直してもらう）
+  invoiceTargetPeriod = null;
+  const box = document.getElementById('invoice-targets');
+  if (box) { box.hidden = true; box.innerHTML = ''; }
+
   let s = {};
   try { s = JSON.parse(localStorage.getItem(INVOICE_SETTINGS_KEY) || '{}'); } catch { s = {}; }
   const pad = n => String(n).padStart(2, '0');
@@ -852,19 +858,85 @@ function billingPeriodLabel(startVal, endVal) {
   return `${fmtYmdLabel(startVal)}〜${fmtYmdLabel(endVal)}`;
 }
 
-async function generateInvoice() {
+// ① 対象期間の訪問一覧をチェックボックス付きで表示
+async function loadInvoiceTargets() {
   const startVal = document.getElementById('summary-start').value;
   const endVal = document.getElementById('summary-end').value;
-  if (!startVal || !endVal) { alert('開始日と終了日を選択してください。'); return; }
+  if (!startVal || !endVal) { alert('対象期間の開始日と終了日を選択してください。'); return; }
   if (startVal > endVal) { alert('開始日は終了日より前の日付にしてください。'); return; }
 
   const all = (await dbGetAll('records')).map(normalizeRecord);
   const records = all.filter(r => {
     const d = (r.visit_start || '').slice(0, 10);
     return d && d >= startVal && d <= endVal;
-  });
+  }).sort((a, b) => (a.visit_start || '').localeCompare(b.visit_start || ''));
+
+  const box = document.getElementById('invoice-targets');
+  box.hidden = false;
+  if (records.length === 0) {
+    box.innerHTML = '<p class="help-text">この期間に記録がありません。期間を確認してください。</p>';
+    invoiceTargetPeriod = null;
+    return;
+  }
+  box.innerHTML = `
+    <div class="targets-head">
+      <span>請求する訪問にチェック（${records.length}件）</span>
+      <button type="button" class="link-btn" onclick="toggleAllTargets(true)">全選択</button>
+      <button type="button" class="link-btn" onclick="toggleAllTargets(false)">全解除</button>
+    </div>
+    <ul class="targets-list">
+      ${records.map(r => `
+        <li><label>
+          <input type="checkbox" class="target-cb" value="${esc(r.id)}" checked onchange="updateTargetSummary()">
+          <span class="t-date">${esc(fmtDateOnly(r.visit_start))} ${esc(fmtTimeRange(r.visit_start, r.visit_end))}</span>
+          <span class="t-loc">${esc(blockLocationsShort(r))}</span>
+        </label></li>`).join('')}
+    </ul>
+    <p class="targets-summary" id="targets-summary"></p>`;
+  invoiceTargetPeriod = { start: startVal, end: endVal };
+  updateTargetSummary();
+}
+
+function toggleAllTargets(on) {
+  document.querySelectorAll('#invoice-targets .target-cb').forEach(cb => { cb.checked = on; });
+  updateTargetSummary();
+}
+
+function getSelectedTargetIds() {
+  return [...document.querySelectorAll('#invoice-targets .target-cb:checked')].map(cb => cb.value);
+}
+
+function updateTargetSummary() {
+  const el = document.getElementById('targets-summary');
+  if (!el) return;
+  const n = getSelectedTargetIds().length;
+  const unit = Number(document.getElementById('inv-unit-price').value) || 0;
+  const adv = Number(document.getElementById('inv-advance').value) || 0;
+  el.textContent = `選択中：${n}回 ／ 小計 ${yen(unit * n)}（立替金込み合計 ${yen(unit * n + adv)}）`;
+}
+
+async function generateInvoice() {
+  const startVal = document.getElementById('summary-start').value;
+  const endVal = document.getElementById('summary-end').value;
+  if (!startVal || !endVal) { alert('開始日と終了日を選択してください。'); return; }
+  if (startVal > endVal) { alert('開始日は終了日より前の日付にしてください。'); return; }
+
+  // ① のチェックリストが今の期間で表示されていなければ、まず表示して選んでもらう
+  if (!invoiceTargetPeriod || invoiceTargetPeriod.start !== startVal || invoiceTargetPeriod.end !== endVal) {
+    await loadInvoiceTargets();
+    if (invoiceTargetPeriod) {
+      alert('対象期間の訪問一覧を表示しました。請求する訪問にチェックを付けてから、もう一度「② 選んだ訪問で請求書を作る」を押してください。');
+    }
+    return;
+  }
+
+  const selectedIds = new Set(getSelectedTargetIds());
+  if (selectedIds.size === 0) { alert('請求する訪問が1件も選ばれていません。チェックを付けてください。'); return; }
+
+  const all = (await dbGetAll('records')).map(normalizeRecord);
+  const records = all.filter(r => selectedIds.has(r.id));
   records.sort((a, b) => (a.visit_start || '').localeCompare(b.visit_start || ''));
-  if (records.length === 0) { alert('その期間の記録が見つかりません。'); return; }
+  if (records.length === 0) { alert('請求する訪問が見つかりません。'); return; }
 
   const issueDate = document.getElementById('inv-issue-date').value;
   if (!issueDate) { alert('発行日を入力してください。'); return; }
