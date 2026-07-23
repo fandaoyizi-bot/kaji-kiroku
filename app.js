@@ -1045,6 +1045,29 @@ async function generateInvoice() {
         </div>
       </div>
     </div>`;
+
+  // PDF保存時の既定ファイル名を「請求書_2026年7月_星道子様.pdf」のように整える
+  // （ブラウザはPDF保存時に document.title を初期ファイル名に使う）
+  printWithFilename(invoiceFileName(startVal, endVal, client));
+}
+
+// 「請求書_〈期間〉_〈宛名〉様」を組み立てる（ファイル名に使えない文字は除去）
+function invoiceFileName(startVal, endVal, client) {
+  const [sy, sm] = startVal.split('-').map(Number);
+  const [ey, em] = endVal.split('-').map(Number);
+  const period = (sy === ey && sm === em)
+    ? `${sy}年${sm}月`
+    : `${fmtYmdLabel(startVal)}〜${fmtYmdLabel(endVal)}`;
+  const name = client.replace(/\s/g, '').replace(/様$/, '');
+  return `請求書_${period}_${name}様`.replace(/[\\/:*?"<>|]/g, '');
+}
+
+// document.title を一時的に差し替えて印刷し、印刷後に元へ戻す
+function printWithFilename(name) {
+  const prevTitle = document.title;
+  document.title = name;
+  const restore = () => { document.title = prevTitle; window.removeEventListener('afterprint', restore); };
+  window.addEventListener('afterprint', restore);
   window.print();
 }
 
