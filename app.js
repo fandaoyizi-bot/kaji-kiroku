@@ -140,6 +140,14 @@ function blockLocations(r) {
   return normalizeRecord(r).work_blocks.map(b => b.location).filter(Boolean).join('・') || '場所未記入';
 }
 
+// 請求書の作業明細用：場所が多いときは上位のみ表示し「他」で省略
+function blockLocationsShort(r, max = 5) {
+  const locs = [...new Set(normalizeRecord(r).work_blocks.map(b => b.location).filter(Boolean))];
+  if (locs.length === 0) return '場所未記入';
+  if (locs.length <= max) return locs.join('・');
+  return locs.slice(0, max).join('・') + ' 他';
+}
+
 // ─── 画面切替 ───
 function switchView(id) {
   revokeUrls();
@@ -157,6 +165,7 @@ async function showHome() {
 function showSettings() {
   document.getElementById('backup-status').textContent = '';
   document.getElementById('restore-status').textContent = '';
+  loadInvoiceSettings();
   switchView('view-settings');
 }
 
@@ -787,6 +796,183 @@ async function printPeriodSummary() {
       <tr><th colspan="2">合計（${records.length}件）</th><th>${esc(fmtDurationText(totalMinutes))}${hasUnknownDuration ? '※' : ''}</th><td></td></tr>
     </table>
     ${hasUnknownDuration ? '<p class="print-meta">※終了時刻が未入力の記録は作業時間の合計に含まれていません。</p>' : ''}`;
+  window.print();
+}
+
+// ─── 請求書（作業明細書つき）───
+const INVOICE_SETTINGS_KEY = 'kk_invoice_settings';
+
+function loadInvoiceSettings() {
+  let s = {};
+  try { s = JSON.parse(localStorage.getItem(INVOICE_SETTINGS_KEY) || '{}'); } catch { s = {}; }
+  const pad = n => String(n).padStart(2, '0');
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+  const monthStartStr = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-01`;
+
+  const setDefault = (id, val) => {
+    const el = document.getElementById(id);
+    if (el && !el.value && val !== undefined && val !== null && val !== '') el.value = val;
+  };
+  setDefault('summary-start', monthStartStr);
+  setDefault('summary-end', todayStr);
+  setDefault('inv-issue-date', todayStr);
+  setDefault('inv-client', s.client);
+  setDefault('inv-issuer', s.issuer);
+  setDefault('inv-unit-price', s.unitPrice ?? 5000);
+  setDefault('inv-payment-method', s.paymentMethod ?? '現金');
+  setDefault('inv-remarks', s.remarks ?? '交通費込み');
+}
+
+function saveInvoiceSettings() {
+  const s = {
+    client: document.getElementById('inv-client').value,
+    issuer: document.getElementById('inv-issuer').value,
+    unitPrice: document.getElementById('inv-unit-price').value,
+    paymentMethod: document.getElementById('inv-payment-method').value,
+    remarks: document.getElementById('inv-remarks').value,
+  };
+  localStorage.setItem(INVOICE_SETTINGS_KEY, JSON.stringify(s));
+}
+
+function fmtYen(n) {
+  return `${Number(n || 0).toLocaleString('ja-JP')}円`;
+}
+
+// 請求書表示用（¥ 記号つき）
+function yen(n) {
+  return `¥${Number(n || 0).toLocaleString('ja-JP')}`;
+}
+
+// 請求明細の項目名に使う期間表記。同一月なら「○年○月分」、月をまたぐ場合は日付範囲
+function billingPeriodLabel(startVal, endVal) {
+  const [sy, sm] = startVal.split('-').map(Number);
+  const [ey, em] = endVal.split('-').map(Number);
+  if (sy === ey && sm === em) return `${sy}年${sm}月分`;
+  return `${fmtYmdLabel(startVal)}〜${fmtYmdLabel(endVal)}`;
+}
+
+async function generateInvoice() {
+  const startVal = document.getElementById('summary-start').value;
+  const endVal = document.getElementById('summary-end').value;
+  if (!startVal || !endVal) { alert('開始日と終了日を選択してください。'); return; }
+  if (startVal > endVal) { alert('開始日は終了日より前の日付にしてください。'); return; }
+
+  const all = (await dbGetAll('records')).map(normalizeRecord);
+  const records = all.filter(r => {
+    const d = (r.visit_start || '').slice(0, 10);
+    return d && d >= startVal && d <= endVal;
+  });
+  records.sort((a, b) => (a.visit_start || '').localeCompare(b.visit_start || ''));
+  if (records.length === 0) { alert('その期間の記録が見つかりません。'); return; }
+
+  const issueDate = document.getElementById('inv-issue-date').value;
+  if (!issueDate) { alert('発行日を入力してください。'); return; }
+  const dueDate = document.getElementById('inv-due-date').value;
+  const invNumber = document.getElementById('inv-number').value || issueDate.replace(/-/g, '');
+  const client = document.getElementById('inv-client').value || '（請求先未入力）';
+  const issuer = document.getElementById('inv-issuer').value || '（発行者未入力）';
+  const paymentMethod = document.getElementById('inv-payment-method').value || '';
+  const remarks = document.getElementById('inv-remarks').value || '';
+  const unitPrice = Number(document.getElementById('inv-unit-price').value) || 0;
+  const advance = Number(document.getElementById('inv-advance').value) || 0;
+
+  saveInvoiceSettings();
+
+  const visitCount = records.length;
+  const subtotal = unitPrice * visitCount;
+  const total = subtotal + advance;
+
+  let totalMinutes = 0;
+  let hasUnknownDuration = false;
+  const detailRows = records.map(r => {
+    const dur = durationMinutes(r.visit_start, r.visit_end);
+    if (dur != null) totalMinutes += dur; else hasUnknownDuration = true;
+    return `<tr>
+      <td class="c-date">${esc(fmtDateOnly(r.visit_start))}</td>
+      <td class="c-time">${esc(fmtTimeRange(r.visit_start, r.visit_end))}</td>
+      <td class="c-dur num">${dur != null ? esc(fmtDurationText(dur)) : '－'}</td>
+      <td>${esc(blockLocationsShort(r))}</td>
+    </tr>`;
+  }).join('');
+
+  // 請求明細行：家事支援（回数×単価）＋（あれば）立替金
+  let itemRows = `<tr>
+    <td>家事支援業務　${esc(billingPeriodLabel(startVal, endVal))}</td>
+    <td class="num">${visitCount} 回</td>
+    <td class="num">${yen(unitPrice)}</td>
+    <td class="num">${yen(subtotal)}</td>
+  </tr>`;
+  if (advance > 0) {
+    itemRows += `<tr>
+      <td>立替金</td><td class="num"></td><td class="num"></td><td class="num">${yen(advance)}</td>
+    </tr>`;
+  }
+
+  const noteParts = [];
+  if (paymentMethod) noteParts.push(`支払方法：${esc(paymentMethod)}`);
+  if (dueDate) noteParts.push(`支払期限：${esc(fmtYmdLabel(dueDate))}`);
+  if (remarks) noteParts.push(`備考：${esc(remarks)}`);
+  const noteHtml = noteParts.length
+    ? `<div class="inv-note">${noteParts.map(p => `<span>${p}</span>`).join('')}</div>` : '';
+
+  document.getElementById('print-area').innerHTML = `
+    <div class="invoice-doc">
+      <h1 class="inv-title">請　求　書</h1>
+      <div class="inv-head">
+        <div class="inv-client">${esc(client)}</div>
+        <div class="inv-head-right">
+          <div class="inv-meta">発行日　${esc(fmtYmdLabel(issueDate))}</div>
+          <div class="inv-meta">請求書番号　${esc(invNumber)}</div>
+          <div class="inv-issuer">${esc(issuer)}</div>
+        </div>
+      </div>
+      <p class="inv-lead">下記のとおりご請求申し上げます。</p>
+
+      <div class="inv-amount-band">
+        <span class="inv-amount-label">ご請求金額</span>
+        <span class="inv-amount-value">${yen(total)}</span>
+      </div>
+
+      <table class="inv-items">
+        <thead>
+          <tr><th>項目</th><th class="num">数量</th><th class="num">単価</th><th class="num">金額</th></tr>
+        </thead>
+        <tbody>${itemRows}</tbody>
+        <tfoot>
+          <tr><th colspan="3">合計金額</th><td class="num total">${yen(total)}</td></tr>
+        </tfoot>
+      </table>
+      ${noteHtml}
+
+      <h2 class="inv-subhead">作業明細</h2>
+      <table class="inv-detail">
+        <thead>
+          <tr><th class="c-date">訪問日</th><th class="c-time">時間帯</th><th class="c-dur num">作業時間</th><th>作業場所</th></tr>
+        </thead>
+        <tbody>${detailRows}</tbody>
+        <tfoot>
+          <tr><th colspan="2">合計　${records.length} 件</th><th class="c-dur num">${esc(fmtDurationText(totalMinutes))}${hasUnknownDuration ? '※' : ''}</th><td></td></tr>
+        </tfoot>
+      </table>
+      ${hasUnknownDuration ? '<p class="inv-fine">※終了時刻が未入力の記録は作業時間の合計に含まれていません。</p>' : ''}
+
+      <div class="inv-cut">✂ ─────────── 切り取り線 ───────────</div>
+
+      <div class="inv-receipt">
+        <h1 class="inv-title small">領　収　書</h1>
+        <div class="rcpt-row">
+          <div class="rcpt-to">${esc(client)}</div>
+          <div class="rcpt-amount"><span>領収金額</span><strong>${yen(total)}</strong></div>
+        </div>
+        <div class="rcpt-for">但し　家事支援料金として（${esc(fmtYmdLabel(startVal))}〜${esc(fmtYmdLabel(endVal))}分）</div>
+        <p class="rcpt-stmt">上記の金額を正に領収いたしました。</p>
+        <div class="rcpt-sign">
+          <span class="rcpt-date">領収日　　　　　年　　　月　　　日</span>
+          <span class="rcpt-issuer">領収者（署名）　＿＿＿＿＿＿＿＿＿＿</span>
+        </div>
+      </div>
+    </div>`;
   window.print();
 }
 

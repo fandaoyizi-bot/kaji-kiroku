@@ -208,10 +208,12 @@ details summary { cursor: pointer; font-size: 0.92rem; color: var(--main-dark); 
 #print-area { display: none; }
 
 @media print {
+  @page { size: A4 portrait; margin: 13mm 12mm; }
   body > .view, .lightbox { display: none !important; }
   body { background: #fff; }
   #print-area { display: block; font-size: 11pt; color: #000; }
   #print-area h1 { font-size: 15pt; border-bottom: 2px solid #000; padding-bottom: 4pt; margin-bottom: 8pt; }
+  #print-area h2 { font-size: 12pt; margin: 12pt 0 5pt; }
   #print-area table { width: 100%; border-collapse: collapse; margin: 6pt 0; }
   #print-area th, #print-area td {
     border: 1px solid #555; padding: 5pt 7pt; text-align: left;
@@ -224,4 +226,133 @@ details summary { cursor: pointer; font-size: 0.92rem; color: var(--main-dark); 
   #print-area .print-photos img { width: 150pt; border: 1px solid #999; }
   #print-area .print-photos figcaption { font-size: 8pt; text-align: center; }
   #print-area .print-meta { font-size: 9pt; color: #333; margin-top: 8pt; }
+
+  /* ─── 請求書兼領収書：シンプル・スタイリッシュな書類デザイン ─── */
+  #print-area .invoice-doc {
+    color: #1b1b1b; font-size: 10.5pt; line-height: 1.65;
+    max-width: 175mm; margin: 0 auto;
+  }
+  /* 共通グリッド（グレー塗り）を打ち消してヘアライン基調に */
+  #print-area .invoice-doc table { width: 100%; border-collapse: collapse; margin: 0; }
+  #print-area .invoice-doc th,
+  #print-area .invoice-doc td {
+    border: none; background: none; width: auto;
+    padding: 5pt 8pt; vertical-align: bottom; white-space: normal;
+  }
+  #print-area .invoice-doc .num {
+    text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums;
+  }
+
+  /* 見出し（宛名／発行者） */
+  #print-area .inv-head {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 12mm; margin: 6pt 0 4pt;
+  }
+  #print-area .inv-client {
+    width: 60mm; flex: none; font-size: 14pt; padding: 6pt 0 4pt 0;
+    border-bottom: 1.2pt solid #1b1b1b;
+  }
+  #print-area .inv-client::after { content: "　様"; font-size: 10pt; }
+  #print-area .inv-head-right { text-align: right; line-height: 1.6; }
+  #print-area .inv-meta { font-size: 9pt; color: #444; letter-spacing: 0.02em; }
+  #print-area .inv-issuer { font-size: 13pt; font-weight: 700; margin-top: 4pt; }
+
+  /* タイトル（最上部・中央） */
+  #print-area .inv-title {
+    text-align: center; font-size: 21pt; font-weight: 700;
+    letter-spacing: 0.35em; text-indent: 0.35em;
+    border: none; margin: 0 0 2pt; padding: 0;
+  }
+  #print-area .inv-title.small { font-size: 15pt; letter-spacing: 0.3em; text-indent: 0.3em; }
+  #print-area .inv-lead {
+    text-align: center; font-size: 9pt; color: #666; margin: 0 0 6pt;
+  }
+
+  /* ご請求金額バンド */
+  #print-area .inv-amount-band {
+    display: flex; justify-content: space-between; align-items: baseline;
+    border-top: 1.6pt solid #1b1b1b; border-bottom: 1.6pt solid #1b1b1b;
+    padding: 7pt 12pt; margin-bottom: 8pt;
+  }
+  #print-area .inv-amount-label { font-size: 10.5pt; letter-spacing: 0.18em; }
+  #print-area .inv-amount-value {
+    font-size: 19pt; font-weight: 700; font-variant-numeric: tabular-nums;
+  }
+
+  /* 請求明細テーブル */
+  #print-area .inv-items thead th {
+    font-size: 9pt; font-weight: 700; letter-spacing: 0.06em; text-align: left;
+    color: #333; border-bottom: 1.2pt solid #1b1b1b; padding-bottom: 3pt;
+  }
+  #print-area .inv-items thead th.num { text-align: right; }
+  #print-area .inv-items tbody td { border-bottom: 0.5pt solid #cfcfcf; padding: 6pt 8pt; vertical-align: top; }
+  #print-area .inv-items tfoot th {
+    text-align: right; font-weight: 700; font-size: 10.5pt;
+    border-top: 1.2pt solid #1b1b1b; padding-top: 6pt;
+  }
+  #print-area .inv-items tfoot .total {
+    text-align: right; font-weight: 700; font-size: 13pt;
+    border-top: 1.2pt solid #1b1b1b; padding-top: 6pt;
+    font-variant-numeric: tabular-nums;
+  }
+  #print-area .inv-items .num:nth-child(2) { width: 5em; }
+  #print-area .inv-items .num:nth-child(3),
+  #print-area .inv-items .num:nth-child(4) { width: 7em; }
+
+  #print-area .inv-note {
+    display: flex; flex-wrap: wrap; gap: 0.6em 1.8em;
+    font-size: 9pt; color: #444; margin-top: 8pt;
+  }
+
+  /* 作業明細 */
+  #print-area .inv-subhead {
+    font-size: 11pt; font-weight: 700; letter-spacing: 0.08em;
+    margin: 10pt 0 2pt; padding-bottom: 3pt; border-bottom: 1pt solid #999;
+  }
+  #print-area .inv-detail thead th {
+    font-size: 8.5pt; font-weight: 700; text-align: left; color: #555;
+    border-bottom: 0.8pt solid #777; padding: 3pt 8pt;
+  }
+  #print-area .inv-detail thead th.num { text-align: right; }
+  #print-area .inv-detail tbody td { font-size: 9.5pt; padding: 3pt 8pt; border-bottom: 0.5pt solid #e0e0e0; }
+  #print-area .inv-detail tfoot th {
+    font-size: 9.5pt; font-weight: 700; text-align: right;
+    border-top: 0.8pt solid #777; padding: 3pt 8pt;
+  }
+  #print-area .inv-detail .c-date { width: 7em; white-space: nowrap; }
+  #print-area .inv-detail .c-time { width: 8em; white-space: nowrap; }
+  #print-area .inv-detail .c-dur { width: 6em; }
+  #print-area .inv-fine { font-size: 8pt; color: #666; margin: 4pt 0 0; }
+
+  /* 切り取り線 */
+  #print-area .inv-cut {
+    text-align: center; color: #999; font-size: 8.5pt; letter-spacing: 0.15em;
+    margin: 10pt 0 8pt;
+  }
+
+  /* 領収書 */
+  #print-area .inv-receipt { page-break-inside: avoid; }
+  #print-area .rcpt-row {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    gap: 10mm; margin: 8pt 0 8pt;
+  }
+  #print-area .rcpt-to {
+    flex: 1; font-size: 13pt; padding: 0 1.5em 5pt 0;
+    border-bottom: 1pt solid #1b1b1b;
+  }
+  #print-area .rcpt-to::after { content: "　様"; font-size: 10pt; }
+  #print-area .rcpt-amount {
+    display: flex; align-items: baseline; gap: 0.7em;
+    border: 1.4pt solid #1b1b1b; padding: 6pt 16pt;
+  }
+  #print-area .rcpt-amount span { font-size: 8.5pt; letter-spacing: 0.1em; }
+  #print-area .rcpt-amount strong { font-size: 16pt; font-variant-numeric: tabular-nums; }
+  #print-area .rcpt-for {
+    font-size: 10pt; border-bottom: 0.5pt solid #aaa;
+    padding-bottom: 5pt; margin-bottom: 12pt;
+  }
+  #print-area .rcpt-stmt { font-size: 10pt; margin: 0 0 10pt; }
+  #print-area .rcpt-sign {
+    display: flex; justify-content: space-between; gap: 8mm; font-size: 10.5pt;
+  }
 }

@@ -126,12 +126,37 @@
     <button class="big-btn secondary" onclick="importBackup()">復元する</button>
     <p id="restore-status" class="notice-ok"></p>
 
-    <h2 class="section-title">作業明細書PDFを作る（PCでのご利用を想定）</h2>
-    <p class="help-text">指定した期間の全訪問記録を、訪問日・時間帯・作業時間の一覧にまとめてPDF出力します。請求書への添付にご利用ください。</p>
-    <label class="field-label">開始日</label>
+    <h2 class="section-title">請求書を作る（PCでのご利用を想定）</h2>
+    <p class="help-text">指定した期間の訪問回数を記録から自動集計し、請求書と作業明細書を1回の印刷でまとめて出力します。</p>
+    <label class="field-label">対象期間：開始日</label>
     <input type="date" id="summary-start" class="input">
-    <label class="field-label">終了日</label>
+    <label class="field-label">対象期間：終了日</label>
     <input type="date" id="summary-end" class="input">
+
+    <label class="field-label">発行日</label>
+    <input type="date" id="inv-issue-date" class="input">
+    <label class="field-label">請求書番号</label>
+    <input type="text" id="inv-number" class="input" placeholder="例：20260801">
+    <label class="field-label">請求先</label>
+    <input type="text" id="inv-client" class="input" placeholder="例：星 道子 様">
+    <label class="field-label">発行者</label>
+    <input type="text" id="inv-issuer" class="input" placeholder="お名前">
+    <label class="field-label">単価（1回あたり）</label>
+    <input type="number" id="inv-unit-price" class="input" min="0" step="100">
+    <label class="field-label">支払方法</label>
+    <input type="text" id="inv-payment-method" class="input" placeholder="例：現金">
+    <label class="field-label">支払期限（任意）</label>
+    <input type="date" id="inv-due-date" class="input">
+    <label class="field-label">立替金（あれば・円）</label>
+    <input type="number" id="inv-advance" class="input" min="0" step="1">
+    <label class="field-label">備考</label>
+    <input type="text" id="inv-remarks" class="input" placeholder="例：交通費込み">
+
+    <button class="big-btn primary" onclick="generateInvoice()">🧾 請求書を作る（作業明細書を添付）</button>
+    <p class="help-text">訪問回数・小計・合計は記録から自動計算されます。発行者・請求先などの入力内容はこの端末に保存され、次回から自動で入力されます。</p>
+
+    <h2 class="section-title">作業明細書だけ作る</h2>
+    <p class="help-text">請求書なしで、訪問日・時間帯・作業時間の一覧だけをPDF出力します。</p>
     <button class="big-btn secondary" onclick="printPeriodSummary()">📋 作業明細書PDFを作る</button>
 
     <h2 class="section-title">このアプリについて</h2>
