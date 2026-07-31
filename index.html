@@ -57,6 +57,10 @@
     <label class="field-label">処分した物（星さんの了承の有無も）</label>
     <textarea id="f-disposed" class="textarea" rows="4" placeholder="なければ空欄でOK"></textarea>
 
+    <label class="field-label">写真（任意）</label>
+    <input type="file" accept="image/*" multiple class="file-input" onchange="handlePhotoInput(this)">
+    <div class="photo-preview" id="photo-preview"></div>
+
     <label class="field-label">当日のコメント（任意・LINE報告文にのみ表示されます）</label>
     <textarea id="f-comment" class="textarea" rows="3" placeholder="星さんの様子や引き継ぎ事項など、なければ空欄でOK"></textarea>
 
