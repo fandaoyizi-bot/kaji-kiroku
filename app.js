@@ -1022,7 +1022,7 @@ async function generateInvoice() {
           <div class="rcpt-to">${esc(client)}</div>
           <div class="rcpt-amount"><span>領収金額</span><strong>${yen(total)}</strong></div>
         </div>
-        <div class="rcpt-for">但し　家事支援料金として（${esc(fmtYmdLabel(startVal))}〜${esc(fmtYmdLabel(endVal))}分）</div>
+        <div class="rcpt-for">但し　家事支援料金として（${esc(billingPeriodLabel(startVal, endVal))}）</div>
         <p class="rcpt-stmt">上記の金額を正に領収いたしました。</p>
         <div class="rcpt-sign">
           <span class="rcpt-date">領収日　　　　　年　　　月　　　日</span>

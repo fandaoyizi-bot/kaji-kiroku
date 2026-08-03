@@ -1,5 +1,5 @@
 // Service Worker: 全静的ファイルをキャッシュしてオフラインでも動作させる
-const CACHE_NAME = 'kaji-kiroku-v20';
+const CACHE_NAME = 'kaji-kiroku-v21';
 const ASSETS = [
   './',
   './index.html',

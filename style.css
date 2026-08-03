@@ -280,7 +280,7 @@ details summary { cursor: pointer; font-size: 0.92rem; color: var(--main-dark); 
     width: 60mm; flex: none; font-size: 14pt; padding: 6pt 0 4pt 0;
     border-bottom: 1.2pt solid #1b1b1b;
   }
-  #print-area .inv-client::after { content: "　様"; font-size: 10pt; }
+  #print-area .inv-client::after { content: "　様"; font-size: 13pt; }
   #print-area .inv-head-right { text-align: right; line-height: 1.6; }
   #print-area .inv-meta { font-size: 9pt; color: #444; letter-spacing: 0.02em; }
   #print-area .inv-issuer { font-size: 13pt; font-weight: 700; margin-top: 4pt; }
@@ -368,7 +368,7 @@ details summary { cursor: pointer; font-size: 0.92rem; color: var(--main-dark); 
     flex: 1; font-size: 13pt; padding: 0 1.5em 5pt 0;
     border-bottom: 1pt solid #1b1b1b;
   }
-  #print-area .rcpt-to::after { content: "　様"; font-size: 10pt; }
+  #print-area .rcpt-to::after { content: "　様"; font-size: 13pt; }
   #print-area .rcpt-amount {
     display: flex; align-items: baseline; gap: 0.7em;
     border: 1.4pt solid #1b1b1b; padding: 6pt 16pt;
